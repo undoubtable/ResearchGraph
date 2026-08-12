@@ -12,7 +12,7 @@ Paper → Structured Research Knowledge → Knowledge Graph → Research Agent
 - Literature Library：添加、编辑、删除、搜索、标签、阅读状态、年份与主题筛选
 - Paper Detail：元数据、研究问题、方法、数据集、贡献、结果、局限、笔记、灵感与图关系
 - My Research：研究方向及关联论文、方法、问题、概念与笔记
-- Knowledge Graph：六类节点、十类关系、搜索、筛选、缩放、节点详情与手工建边
+- Knowledge Graph：六类节点、十类关系、搜索、节点/关系筛选、缩放、平移、节点详情与手工建边
 - Research Agent：10 个 evidence-first 工具接口和不凭空回答的 UI 骨架
 - D1/SQLite 数据模型、Drizzle schema 与首个迁移
 
@@ -48,3 +48,7 @@ npm run build
 - [项目状态](docs/PROJECT_STATE.md)
 
 演示数据中只有 `Concept Bottleneck Models` 使用了基本的公开元数据；其余不确定记录均明确标记为 Demo，不应直接用于学术引用。
+
+## License
+
+Apache License 2.0，见 [LICENSE](LICENSE)。
