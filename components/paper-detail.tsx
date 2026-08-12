@@ -6,6 +6,8 @@ import { edges, nodes, paperById } from "@/lib/demo-data";
 import { loadLocalPapers, updateLocalPaper } from "@/lib/local-library";
 import { getPaperFile, getPaperFileUrl } from "@/lib/local-files";
 import { analyzePaperText, extractPdfText, fillMissingPaperAnalysis } from "@/lib/paper-analysis";
+import { bilingualizeKeywords, summarizePaperInChinese } from "@/lib/paper-localization";
+import { chooseMetadataMatch, searchPaperMetadata } from "@/lib/paper-metadata";
 import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper } from "@/lib/types";
 import { createdByLabel, relationTypeLabel } from "@/lib/ui-labels";
@@ -70,24 +72,41 @@ export function PaperDetail({ id }: { id: string }) {
     setAnalysisNotice(paper.attachmentName ? "正在本地读取 PDF 并整理内容…" : "正在根据摘要整理内容…");
     try {
       const localFile = paper.attachmentName ? await getPaperFile(id) : undefined;
-      const sourceText = localFile ? await extractPdfText(localFile) : paper.abstract || "";
+      let sourceText = localFile ? await extractPdfText(localFile) : paper.abstract || "";
+      let publicKeywords: string[] = [];
+      let publicAbstract = paper.abstract || "";
+      if (!sourceText && (paper.doi || paper.title)) {
+        const lookup = paper.doi || paper.title;
+        const results = await searchPaperMetadata(lookup);
+        const found = chooseMetadataMatch(lookup, results).selected ?? (paper.doi ? results[0] : undefined);
+        sourceText = found?.abstract || "";
+        publicAbstract = found?.abstract || "";
+        publicKeywords = found?.keywords ?? [];
+      }
       if (!sourceText) {
         setAnalysisNotice("目前没有本地 PDF 或公开摘要。请先返回文献库上传 PDF，或刷新论文资料。 ");
         return;
       }
       const filled = fillMissingPaperAnalysis(paper, analyzePaperText(sourceText));
+      const autoSummary = await summarizePaperInChinese(sourceText);
+      const autoKeywords = publicKeywords.length
+        ? await bilingualizeKeywords(publicKeywords)
+        : paper.autoKeywords;
       const count = Object.keys(filled).length;
-      if (!count) {
+      if (!count && !autoSummary) {
         setAnalysisNotice("没有发现可可靠提取的新内容；已有手工内容不会被覆盖。 ");
         return;
       }
       const updated = updateLocalPaper(id, {
         ...filled,
+        autoSummary: autoSummary || paper.autoSummary,
+        autoKeywords,
+        abstract: publicAbstract || paper.abstract,
         analysisSource: localFile ? "local_pdf" : "abstract",
         analysisUpdatedAt: new Date().toISOString(),
       });
       if (updated) setPaper(updated);
-      setAnalysisNotice(`已自动补全 ${count} 项；请结合原文复核，手工内容没有被覆盖。`);
+      setAnalysisNotice(`已生成中文凝练${count ? `，并自动补全 ${count} 项` : ""}；请结合原文复核，手工内容没有被覆盖。`);
     } catch {
       setAnalysisNotice("论文内容分析失败；PDF 可能是扫描图片，或文件暂时无法读取。 ");
     } finally {
@@ -173,8 +192,8 @@ export function PaperDetail({ id }: { id: string }) {
               {paper.isDemo && <span className="tag demo">演示数据</span>}
             </div>
             <hr style={{ border: 0, borderTop: "1px solid var(--line)", margin: "18px 0" }} />
-            <span className="eyebrow">自动摘要</span>
-            <p className="subtle" style={{ marginTop: 10 }}>{paper.autoSummary || "刷新论文资料后可自动生成。"}</p>
+            <span className="eyebrow">这篇论文主要做了什么</span>
+            <p className="subtle" style={{ marginTop: 10 }}>{paper.autoSummary || "刷新资料或分析论文内容后，可自动生成中文凝练。"}</p>
             {paper.mySummary && <><span className="eyebrow">我的总结</span><p className="subtle" style={{ marginTop: 10 }}>{paper.mySummary}</p></>}
             <Link href="/graph" className="btn" style={{ width: "100%" }}>在图谱中查看</Link>
           </aside>

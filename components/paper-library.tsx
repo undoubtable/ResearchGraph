@@ -18,6 +18,7 @@ import {
 } from "@/lib/local-library";
 import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
 import { analyzePaperText, fillMissingPaperAnalysis } from "@/lib/paper-analysis";
+import { bilingualizeKeywords, summarizePaperInChinese } from "@/lib/paper-localization";
 import {
   extractPdfSearchText,
   chooseMetadataMatch,
@@ -112,6 +113,12 @@ export function PaperLibrary() {
         // 查询失败时仍保留用户输入，允许稍后再次补全。
       }
     }
+    const localizedKeywords = resolvedMetadata?.keywords?.length
+      ? await bilingualizeKeywords(resolvedMetadata.keywords)
+      : editing?.autoKeywords;
+    const localizedSummary = resolvedMetadata?.abstract
+      ? await summarizePaperInChinese(resolvedMetadata.abstract)
+      : editing?.autoSummary;
     const id = editing?.id ?? crypto.randomUUID();
     const enteredTitle = String(form.get("title")).trim();
     const enteredAuthors = String(form.get("authors"))
@@ -141,11 +148,11 @@ export function PaperLibrary() {
           .split(/[,，]/)
           .map((value) => value.trim())
           .filter(Boolean) : editing?.tags) ?? [],
-      autoKeywords: resolvedMetadata?.keywords?.length ? resolvedMetadata.keywords : editing?.autoKeywords,
+      autoKeywords: localizedKeywords,
       readingStatus: String(form.get("status")) as ReadingStatus,
       abstract: resolvedMetadata?.abstract || editing?.abstract,
       mySummary: String(form.get("summary")).trim() || editing?.mySummary || "",
-      autoSummary: resolvedMetadata?.summary || editing?.autoSummary,
+      autoSummary: localizedSummary || editing?.autoSummary,
       myNotes: String(form.get("notes")).trim(),
       researchQuestion: String(form.get("researchQuestion")).trim(),
       methodSummary: String(form.get("methodSummary")).trim(),
@@ -259,6 +266,12 @@ export function PaperLibrary() {
     const abstract = found.abstract || paper.abstract || "";
     const analysis = analyzePaperText(abstract);
     const filledAnalysis = fillMissingPaperAnalysis(paper, analysis);
+    const localizedKeywords = found.keywords?.length
+      ? await bilingualizeKeywords(found.keywords)
+      : paper.autoKeywords;
+    const localizedSummary = abstract
+      ? await summarizePaperInChinese(abstract)
+      : paper.autoSummary;
     return {
       ...paper,
       ...filledAnalysis,
@@ -270,8 +283,8 @@ export function PaperLibrary() {
       url: found.url || paper.url,
       pdfUrl: found.pdfUrl || paper.pdfUrl,
       abstract: abstract || undefined,
-      autoKeywords: found.keywords?.length ? found.keywords : paper.autoKeywords,
-      autoSummary: found.summary || paper.autoSummary,
+      autoKeywords: localizedKeywords,
+      autoSummary: localizedSummary || paper.autoSummary,
       metadataRefreshedAt: now,
       analysisSource: Object.keys(filledAnalysis).length ? "abstract" : paper.analysisSource,
       analysisUpdatedAt: Object.keys(filledAnalysis).length ? now : paper.analysisUpdatedAt,
