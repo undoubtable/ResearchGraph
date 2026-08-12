@@ -6,7 +6,15 @@ export interface PaperMetadataCandidate {
   venue?: string;
   doi?: string;
   url?: string;
+  pdfUrl?: string;
   score?: number;
+}
+
+interface OpenAlexWork {
+  doi?: string;
+  primary_location?: { landing_page_url?: string; pdf_url?: string };
+  best_oa_location?: { landing_page_url?: string; pdf_url?: string };
+  locations?: Array<{ landing_page_url?: string; pdf_url?: string }>;
 }
 
 interface CrossrefItem {
@@ -20,9 +28,9 @@ interface CrossrefItem {
   score?: number;
 }
 
-function fromCrossref(item: CrossrefItem): PaperMetadataCandidate {
+async function fromCrossref(item: CrossrefItem): Promise<PaperMetadataCandidate> {
   const dateParts = item.published?.["date-parts"] ?? item.issued?.["date-parts"];
-  return {
+  const candidate: PaperMetadataCandidate = {
     id: item.DOI || item.URL || item.title?.[0] || crypto.randomUUID(),
     title: item.title?.[0] || "未命名论文",
     authors: (item.author ?? []).map((author) =>
@@ -34,6 +42,23 @@ function fromCrossref(item: CrossrefItem): PaperMetadataCandidate {
     url: item.URL,
     score: item.score,
   };
+  if (!item.DOI) return candidate;
+  try {
+    const response = await fetch(`https://api.openalex.org/works?filter=doi:${encodeURIComponent(item.DOI)}&per-page=1`, { headers: { Accept: "application/json" } });
+    if (!response.ok) return candidate;
+    const payload = await response.json() as { results?: OpenAlexWork[] };
+    const work = payload.results?.[0];
+    const pdfLocation = work?.best_oa_location?.pdf_url
+      ? work.best_oa_location
+      : work?.locations?.find((location) => location.pdf_url);
+    return {
+      ...candidate,
+      url: work?.primary_location?.landing_page_url || candidate.url,
+      pdfUrl: pdfLocation?.pdf_url,
+    };
+  } catch {
+    return candidate;
+  }
 }
 
 export async function searchPaperMetadata(query: string) {
@@ -48,9 +73,52 @@ export async function searchPaperMetadata(query: string) {
   const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("公开学术数据库暂时无法访问。 ");
   const payload = await response.json() as { message?: CrossrefItem | { items?: CrossrefItem[] } };
-  if (isDoi) return payload.message ? [fromCrossref(payload.message as CrossrefItem)] : [];
+  if (isDoi) return payload.message ? [await fromCrossref(payload.message as CrossrefItem)] : [];
   const items = (payload.message as { items?: CrossrefItem[] })?.items ?? [];
-  return items.map(fromCrossref);
+  return Promise.all(items.map(fromCrossref));
+}
+
+function normalizedTitle(value: string) {
+  return value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function titleSimilarity(left: string, right: string) {
+  const a = normalizedTitle(left);
+  const b = normalizedTitle(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const aTokens = new Set(a.split(" "));
+  const bTokens = new Set(b.split(" "));
+  const intersection = [...aTokens].filter((token) => bTokens.has(token)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  const containment = intersection / Math.max(1, Math.min(aTokens.size, bTokens.size));
+  const jaccard = intersection / Math.max(1, union);
+  return containment * 0.65 + jaccard * 0.35;
+}
+
+export function chooseMetadataMatch(query: string, candidates: PaperMetadataCandidate[]) {
+  if (!candidates.length) return { selected: undefined, ambiguous: [] as PaperMetadataCandidate[] };
+  const normalizedDoi = query
+    .trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "");
+  if (/^10\.\d{4,9}\//i.test(normalizedDoi)) {
+    return { selected: candidates[0], ambiguous: [] as PaperMetadataCandidate[] };
+  }
+  const ranked = candidates
+    .map((candidate) => ({ candidate, similarity: titleSimilarity(query, candidate.title) }))
+    .sort((left, right) => right.similarity - left.similarity);
+  const best = ranked[0];
+  const runnerUp = ranked[1];
+  const decisive = best.similarity >= 0.78
+    && (!runnerUp || best.similarity - runnerUp.similarity >= 0.12);
+  return decisive
+    ? { selected: best.candidate, ambiguous: [] as PaperMetadataCandidate[] }
+    : { selected: undefined, ambiguous: ranked.filter((item) => item.similarity >= 0.45).slice(0, 3).map((item) => item.candidate) };
 }
 
 export async function extractPdfSearchText(file: File) {

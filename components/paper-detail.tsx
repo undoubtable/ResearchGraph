@@ -73,7 +73,8 @@ export function PaperDetail({ id }: { id: string }) {
           </div>
           <div className="top-actions">
             {paper.attachmentName && <button className="btn primary" onClick={openLocalFile}>打开本地 PDF</button>}
-            {paperSourceUrl(paper) && <a className="btn primary" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文原文 ↗</a>}
+            {paper.pdfUrl && <a className="btn primary" href={paper.pdfUrl} target="_blank" rel="noreferrer">打开 PDF ↗</a>}
+            {paperSourceUrl(paper) && <a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文页面 ↗</a>}
             <span className={`status ${paper.readingStatus}`}>{paper.readingStatus === "read" ? "已读" : paper.readingStatus === "reading" ? "阅读中" : "待读"}</span>
           </div>
         </div>

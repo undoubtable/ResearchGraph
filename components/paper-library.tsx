@@ -19,6 +19,7 @@ import {
 import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
 import {
   extractPdfSearchText,
+  chooseMetadataMatch,
   type PaperMetadataCandidate,
   searchPaperMetadata,
 } from "@/lib/paper-metadata";
@@ -90,6 +91,16 @@ export function PaperLibrary() {
       .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
       .replace(/^doi:\s*/i, "");
     const sourceIsDoi = /^10\.\d{4,9}\//i.test(doiFromSource);
+    let resolvedMetadata = metadata;
+    if (!resolvedMetadata && source) {
+      setMetadataNotice(sourceIsDoi ? "正在通过 DOI 获取论文信息并查找可用 PDF…" : "正在根据标题自动匹配论文信息…");
+      try {
+        const results = await searchPaperMetadata(sourceIsDoi ? doiFromSource : source);
+        resolvedMetadata = chooseMetadataMatch(sourceIsDoi ? doiFromSource : source, results).selected;
+      } catch {
+        // 查询失败时仍保留用户输入，允许稍后再次补全。
+      }
+    }
     const id = editing?.id ?? crypto.randomUUID();
     const enteredTitle = String(form.get("title")).trim();
     const enteredAuthors = String(form.get("authors"))
@@ -104,12 +115,13 @@ export function PaperLibrary() {
     const paper: Paper = {
       ...editing,
       id,
-      title: enteredTitle || metadata?.title || pdfFile?.name.replace(/\.pdf$/i, "") || editing?.title || linkTitle,
-      authors: enteredAuthors.length ? enteredAuthors : metadata?.authors ?? [],
-      year: Number(form.get("year")) || metadata?.year || undefined,
-      venue: String(form.get("venue")).trim() || metadata?.venue || "",
-      doi: sourceIsDoi ? doiFromSource : metadata?.doi || "",
-      url: source && !sourceIsDoi ? source : metadata?.url || "",
+      title: enteredTitle || resolvedMetadata?.title || pdfFile?.name.replace(/\.pdf$/i, "") || editing?.title || linkTitle,
+      authors: enteredAuthors.length ? enteredAuthors : resolvedMetadata?.authors ?? [],
+      year: Number(form.get("year")) || resolvedMetadata?.year || undefined,
+      venue: String(form.get("venue")).trim() || resolvedMetadata?.venue || "",
+      doi: sourceIsDoi ? doiFromSource : resolvedMetadata?.doi || "",
+      url: source && !sourceIsDoi ? source : resolvedMetadata?.url || "",
+      pdfUrl: resolvedMetadata?.pdfUrl || editing?.pdfUrl,
       attachmentName: pdfFile?.name || editing?.attachmentName,
       tags: String(form.get("tags"))
         .split(/[,，]/)
@@ -159,9 +171,14 @@ export function PaperLibrary() {
     setMetadataNotice("正在查询公开学术数据库…");
     try {
       const results = await searchPaperMetadata(query);
-      setCandidates(results);
-      if (results.length === 1) setMetadata(results[0]);
-      setMetadataNotice(results.length ? `找到 ${results.length} 条可能匹配的论文，请确认。` : "没有找到匹配结果，仍可直接保存。 ");
+      const match = chooseMetadataMatch(query, results);
+      setMetadata(match.selected);
+      setCandidates(match.ambiguous);
+      setMetadataNotice(match.selected
+        ? "已根据 DOI 或标题自动匹配并补全论文信息。"
+        : match.ambiguous.length
+          ? "检索到几篇标题相近的论文，无法可靠区分，请确认一次。"
+          : "没有找到标题足够接近的论文，仍可直接保存。 ");
     } catch (error) {
       setMetadataNotice(error instanceof Error ? error.message : "自动查询失败，仍可直接保存。 ");
     } finally {
@@ -199,6 +216,31 @@ export function PaperLibrary() {
     } else {
       tab?.close();
       setNotice("没有找到这篇论文的本地文件，请重新编辑并上传。 ");
+    }
+  };
+
+  const findAvailablePdf = async (paper: Paper) => {
+    if (!paper.doi) return;
+    setNotice("正在查找开放获取 PDF…");
+    try {
+      const found = (await searchPaperMetadata(paper.doi))[0];
+      if (!found) {
+        setNotice("没有找到该 DOI 对应的论文信息。 ");
+        return;
+      }
+      const updated = {
+        ...paper,
+        title: found.title || paper.title,
+        authors: found.authors.length ? found.authors : paper.authors,
+        year: found.year || paper.year,
+        venue: found.venue || paper.venue,
+        url: found.url || paper.url,
+        pdfUrl: found.pdfUrl,
+      };
+      persist(items.map((item) => item.id === paper.id ? updated : item));
+      setNotice(found.pdfUrl ? "已找到可直接打开的开放 PDF。" : "书目信息已更新，但没有发现开放 PDF；你仍可打开论文页面，或手动上传已有 PDF。 ");
+    } catch {
+      setNotice("暂时无法查询开放 PDF，请稍后再试。 ");
     }
   };
 
@@ -317,7 +359,9 @@ export function PaperLibrary() {
                 </span>
                 <div>
                   {paper.attachmentName && <><button className="btn" onClick={() => openLocalFile(paper)}>打开本地 PDF</button>{" "}</>}
-                  {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开原文 ↗</a>{" "}</>}
+                  {paper.pdfUrl && <><a className="btn primary" href={paper.pdfUrl} target="_blank" rel="noreferrer">打开 PDF ↗</a>{" "}</>}
+                  {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文页面 ↗</a>{" "}</>}
+                  {paper.doi && !paper.attachmentName && !paper.pdfUrl && <><button className="btn" onClick={() => findAvailablePdf(paper)}>查找可用 PDF</button>{" "}</>}
                   <button className="btn" onClick={() => openEditor(paper)}>编辑</button>{" "}
                   <button className="btn danger" onClick={() => remove(paper.id)}>删除</button>
                 </div>
@@ -360,7 +404,7 @@ export function PaperLibrary() {
                     <span>{candidate.authors.slice(0, 3).join("、") || "作者未知"} · {candidate.year || "年份未知"} · {candidate.venue || "来源未知"}</span>
                   </button>)}
                 </div>}
-                {metadata && <div className="notice wide">将自动填写：{metadata.title}；{metadata.authors.join("、") || "作者未知"}；{metadata.year || "年份未知"}；{metadata.venue || "来源未知"}{metadata.doi ? `；DOI ${metadata.doi}` : ""}</div>}
+                {metadata && <div className="notice wide">将自动填写：{metadata.title}；{metadata.authors.join("、") || "作者未知"}；{metadata.year || "年份未知"}；{metadata.venue || "来源未知"}{metadata.doi ? `；DOI ${metadata.doi}` : ""}{metadata.pdfUrl ? "；已找到开放 PDF" : "；暂未找到开放 PDF"}</div>}
                 <details className="wide optional-fields">
                   <summary>补充论文信息（全部可选）</summary>
                   <div className="form-grid" style={{ marginTop: 14 }}>
