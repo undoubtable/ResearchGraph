@@ -2,13 +2,16 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 import { directions as demoDirections } from "@/lib/demo-data";
+import { papers as demoPapers } from "@/lib/demo-data";
+import { loadLocalPapers } from "@/lib/local-library";
 import {
   loadActiveDirectionId,
   loadResearchDirections,
   saveActiveDirectionId,
   saveResearchDirections,
 } from "@/lib/local-research";
-import type { ResearchDirection } from "@/lib/types";
+import type { Paper, ResearchDirection } from "@/lib/types";
+import Link from "next/link";
 import { AppShell } from "./app-shell";
 
 export function ResearchPage() {
@@ -16,12 +19,16 @@ export function ResearchPage() {
   const [activeId, setActiveId] = useState(demoDirections[0].id);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [papers, setPapers] = useState(demoPapers);
+  const [managingPapers, setManagingPapers] = useState(false);
+  const [paperQuery, setPaperQuery] = useState("");
 
   useEffect(() => {
     queueMicrotask(() => {
       const local = loadResearchDirections();
       setDirections(local);
       setActiveId(loadActiveDirectionId(local) ?? local[0].id);
+      setPapers(loadLocalPapers());
     });
   }, []);
 
@@ -49,6 +56,7 @@ export function ResearchPage() {
       keywords: splitValues(String(form.get("keywords"))),
       notes: "",
       relatedPapers: [],
+      relatedPaperIds: [],
       relatedMethods: [],
       relatedProblems: [],
       relatedConcepts: [],
@@ -59,6 +67,18 @@ export function ResearchPage() {
     selectDirection(created.id);
     setCreating(false);
     setEditing(true);
+  };
+
+  const relatedPaperIds = direction.relatedPaperIds ?? [];
+  const relatedPapers = relatedPaperIds
+    .map((id) => papers.find((paper) => paper.id === id))
+    .filter((paper): paper is Paper => Boolean(paper));
+
+  const togglePaper = (paper: Paper) => {
+    const nextIds = relatedPaperIds.includes(paper.id)
+      ? relatedPaperIds.filter((id) => id !== paper.id)
+      : [...relatedPaperIds, paper.id];
+    updateDirection({ relatedPaperIds: nextIds });
   };
 
   const removeDirection = () => {
@@ -101,7 +121,14 @@ export function ResearchPage() {
         </section>
 
         <div className="research-columns section">
-          <ResearchList title="相关论文" items={direction.relatedPapers} editing={editing} onChange={(items) => updateDirection({ relatedPapers: items })} />
+          <div className="card related-paper-card">
+            <div className="section-head"><h2>相关论文</h2><button className="btn" onClick={() => setManagingPapers(true)}>管理论文</button></div>
+            {relatedPapers.length ? <div className="direction-paper-list">{relatedPapers.map((paper) => <div className="direction-paper" key={paper.id}>
+              <Link href={`/library/${paper.id}`}><strong>{paper.title}</strong><span>{paper.authors.slice(0, 2).join("、") || "作者未填"} · {paper.year || "年份未填"}</span></Link>
+              <button className="btn danger" aria-label={`移除 ${paper.title}`} onClick={() => togglePaper(paper)}>移除</button>
+            </div>)}</div> : <p className="subtle">尚未关联文献库中的论文。</p>}
+            {direction.relatedPapers.length > 0 && <details className="legacy-papers"><summary>查看旧版手填论文</summary><ul className="research-list">{direction.relatedPapers.map((paper) => <li key={paper}>{paper}</li>)}</ul></details>}
+          </div>
           <ResearchList title="相关方法" items={direction.relatedMethods} editing={editing} onChange={(items) => updateDirection({ relatedMethods: items })} />
           <ResearchList title="相关问题" items={direction.relatedProblems} editing={editing} onChange={(items) => updateDirection({ relatedProblems: items })} />
           <ResearchList title="相关概念" items={direction.relatedConcepts} editing={editing} onChange={(items) => updateDirection({ relatedConcepts: items })} />
@@ -121,6 +148,17 @@ export function ResearchPage() {
         </div>
         <div className="modal-actions"><button className="btn primary">创建并开始编辑</button></div>
       </form></div>}
+
+      {managingPapers && <div className="modal-backdrop" role="presentation"><div className="modal paper-manager">
+        <div className="section-head"><div><h2>管理“{direction.title}”的论文</h2><p className="meta">已关联 {relatedPaperIds.length} 篇</p></div><button className="btn" onClick={() => setManagingPapers(false)}>完成</button></div>
+        <input className="field" value={paperQuery} onChange={(event) => setPaperQuery(event.target.value)} placeholder="搜索标题、作者、标签或摘要…" />
+        <div className="paper-picker-list">{papers.filter((paper) => `${paper.title} ${paper.authors.join(" ")} ${paper.tags.join(" ")} ${paper.mySummary}`.toLowerCase().includes(paperQuery.toLowerCase())).map((paper) => {
+          const selected = relatedPaperIds.includes(paper.id);
+          return <button key={paper.id} className={`paper-picker ${selected ? "selected" : ""}`} onClick={() => togglePaper(paper)}>
+            <span className="paper-check">{selected ? "✓" : "+"}</span><span><strong>{paper.title}</strong><small>{paper.authors.slice(0, 3).join("、") || "作者未填"} · {paper.year || "年份未填"} · {paper.readingStatus === "read" ? "已读" : paper.readingStatus === "reading" ? "阅读中" : "待读"}</small></span>
+          </button>;
+        })}</div>
+      </div></div>}
     </AppShell>
   );
 }

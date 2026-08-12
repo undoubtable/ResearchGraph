@@ -12,4 +12,4 @@ export interface Paper {
 }
 export interface GraphNode { id: string; type: NodeType; label: string; description?: string; paperId?: string; }
 export interface GraphEdge { id: string; source: string; target: string; relationType: RelationType; confidence: number; evidence: string; createdBy: CreatedBy; createdAt: string; }
-export interface ResearchDirection { id: string; title: string; description: string; keywords: string[]; notes: string; relatedPapers: string[]; relatedMethods: string[]; relatedProblems: string[]; relatedConcepts: string[]; }
+export interface ResearchDirection { id: string; title: string; description: string; keywords: string[]; notes: string; relatedPapers: string[]; relatedPaperIds?: string[]; relatedMethods: string[]; relatedProblems: string[]; relatedConcepts: string[]; }

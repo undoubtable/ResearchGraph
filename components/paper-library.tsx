@@ -123,12 +123,16 @@ export function PaperLibrary() {
       url: source && !sourceIsDoi ? source : resolvedMetadata?.url || "",
       pdfUrl: resolvedMetadata?.pdfUrl || editing?.pdfUrl,
       attachmentName: pdfFile?.name || editing?.attachmentName,
-      tags: String(form.get("tags"))
+      tags: (String(form.get("tags"))
         .split(/[,，]/)
         .map((value) => value.trim())
-        .filter(Boolean),
+        .filter(Boolean).length ? String(form.get("tags"))
+          .split(/[,，]/)
+          .map((value) => value.trim())
+          .filter(Boolean) : resolvedMetadata?.keywords) ?? [],
       readingStatus: String(form.get("status")) as ReadingStatus,
-      mySummary: String(form.get("summary")).trim(),
+      abstract: resolvedMetadata?.abstract || editing?.abstract,
+      mySummary: String(form.get("summary")).trim() || resolvedMetadata?.summary || editing?.mySummary || "",
       myNotes: String(form.get("notes")).trim(),
       researchQuestion: String(form.get("researchQuestion")).trim(),
       methodSummary: String(form.get("methodSummary")).trim(),
@@ -404,7 +408,7 @@ export function PaperLibrary() {
                     <span>{candidate.authors.slice(0, 3).join("、") || "作者未知"} · {candidate.year || "年份未知"} · {candidate.venue || "来源未知"}</span>
                   </button>)}
                 </div>}
-                {metadata && <div className="notice wide">将自动填写：{metadata.title}；{metadata.authors.join("、") || "作者未知"}；{metadata.year || "年份未知"}；{metadata.venue || "来源未知"}{metadata.doi ? `；DOI ${metadata.doi}` : ""}{metadata.pdfUrl ? "；已找到开放 PDF" : "；暂未找到开放 PDF"}</div>}
+                {metadata && <div className="notice wide">将自动填写：{metadata.title}；{metadata.authors.join("、") || "作者未知"}；{metadata.year || "年份未知"}；{metadata.venue || "来源未知"}{metadata.doi ? `；DOI ${metadata.doi}` : ""}{metadata.keywords?.length ? `；${metadata.keywords.length} 个关键词` : "；未获取到关键词"}{metadata.summary ? "；已生成一句话总结" : "；未获取到摘要"}{metadata.pdfUrl ? "；已找到开放 PDF" : "；暂未找到开放 PDF"}</div>}
                 <details className="wide optional-fields">
                   <summary>补充论文信息（全部可选）</summary>
                   <div className="form-grid" style={{ marginTop: 14 }}>

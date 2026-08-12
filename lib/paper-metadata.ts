@@ -7,6 +7,9 @@ export interface PaperMetadataCandidate {
   doi?: string;
   url?: string;
   pdfUrl?: string;
+  abstract?: string;
+  summary?: string;
+  keywords?: string[];
   score?: number;
 }
 
@@ -15,6 +18,8 @@ interface OpenAlexWork {
   primary_location?: { landing_page_url?: string; pdf_url?: string };
   best_oa_location?: { landing_page_url?: string; pdf_url?: string };
   locations?: Array<{ landing_page_url?: string; pdf_url?: string }>;
+  abstract_inverted_index?: Record<string, number[]>;
+  topics?: Array<{ display_name?: string; score?: number }>;
 }
 
 interface CrossrefItem {
@@ -25,7 +30,29 @@ interface CrossrefItem {
   published?: { "date-parts"?: number[][] };
   issued?: { "date-parts"?: number[][] };
   "container-title"?: string[];
+  abstract?: string;
   score?: number;
+}
+
+function plainText(value?: string) {
+  if (!value) return "";
+  const document = new DOMParser().parseFromString(value, "text/html");
+  return (document.body.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function restoreAbstract(index?: Record<string, number[]>) {
+  if (!index) return "";
+  const words: Array<[number, string]> = [];
+  for (const [word, positions] of Object.entries(index)) {
+    for (const position of positions) words.push([position, word]);
+  }
+  return words.sort((left, right) => left[0] - right[0]).map((item) => item[1]).join(" ");
+}
+
+function oneSentence(abstract: string) {
+  if (!abstract) return "";
+  const first = abstract.match(/^.{40,320}?(?:[.!?。！？](?=\s|$)|$)/u)?.[0] || abstract.slice(0, 260);
+  return first.trim();
 }
 
 async function fromCrossref(item: CrossrefItem): Promise<PaperMetadataCandidate> {
@@ -40,6 +67,7 @@ async function fromCrossref(item: CrossrefItem): Promise<PaperMetadataCandidate>
     venue: item["container-title"]?.[0],
     doi: item.DOI,
     url: item.URL,
+    abstract: plainText(item.abstract),
     score: item.score,
   };
   if (!item.DOI) return candidate;
@@ -51,10 +79,19 @@ async function fromCrossref(item: CrossrefItem): Promise<PaperMetadataCandidate>
     const pdfLocation = work?.best_oa_location?.pdf_url
       ? work.best_oa_location
       : work?.locations?.find((location) => location.pdf_url);
+    const abstract = restoreAbstract(work?.abstract_inverted_index) || candidate.abstract || "";
+    const keywords = (work?.topics ?? [])
+      .filter((topic) => (topic.score ?? 0) >= 0.35)
+      .slice(0, 6)
+      .map((topic) => topic.display_name)
+      .filter((value): value is string => Boolean(value));
     return {
       ...candidate,
       url: work?.primary_location?.landing_page_url || candidate.url,
       pdfUrl: pdfLocation?.pdf_url,
+      abstract,
+      summary: oneSentence(abstract),
+      keywords,
     };
   } catch {
     return candidate;
@@ -69,7 +106,7 @@ export async function searchPaperMetadata(query: string) {
   const isDoi = /^10\.\d{4,9}\//i.test(normalizedDoi);
   const endpoint = isDoi
     ? `https://api.crossref.org/works/${encodeURIComponent(normalizedDoi)}`
-    : `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=5&select=DOI,title,author,published,issued,container-title,URL,score`;
+    : `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=5&select=DOI,title,author,published,issued,container-title,URL,abstract,score`;
   const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error("公开学术数据库暂时无法访问。 ");
   const payload = await response.json() as { message?: CrossrefItem | { items?: CrossrefItem[] } };

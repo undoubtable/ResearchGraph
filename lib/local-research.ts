@@ -13,7 +13,11 @@ export function loadResearchDirections(): ResearchDirection[] {
       return demoDirections;
     }
     const parsed = JSON.parse(stored) as unknown;
-    return Array.isArray(parsed) && parsed.length ? parsed as ResearchDirection[] : demoDirections;
+    if (!Array.isArray(parsed) || !parsed.length) return demoDirections;
+    return (parsed as ResearchDirection[]).map((direction) => ({
+      ...direction,
+      relatedPaperIds: direction.relatedPaperIds ?? [],
+    }));
   } catch {
     return demoDirections;
   }
