@@ -17,6 +17,8 @@
 /.wrangler/
 /outputs/
 /work/
+/.site-package/
+researchgraph-site-*.tgz
 
 # local tooling
 /.npm-cache/
@@ -32,6 +34,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.vinext-dev*.log
 
 # platform and editor files
 .DS_Store

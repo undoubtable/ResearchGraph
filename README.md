@@ -20,10 +20,20 @@ Paper → Structured Research Knowledge → Knowledge Graph → Research Agent
 
 要求 Node.js 22.13+。
 
+Windows 用户可以直接双击项目根目录的 `启动 ResearchGraph.cmd`。首次运行若尚未安装依赖，启动器会自动执行安装；之后固定打开：
+
+```text
+http://localhost:3000/library
+```
+
+也可以在 PowerShell 中运行：
+
 ```bash
 npm install
 npm run dev
 ```
+
+文献库采用本地优先存储：新增、编辑、删除和论文笔记会自动保存在当前浏览器的 `localhost:3000` 数据中。请定期点击文献库右上角的“导出备份”；换电脑或浏览器时，用“导入备份”恢复。GitHub 仓库只保存程序代码，不会上传你的私人论文数据。
 
 质量检查：
 
