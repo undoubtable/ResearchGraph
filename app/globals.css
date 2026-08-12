@@ -103,6 +103,11 @@ textarea.field { min-height:110px; resize:vertical; line-height:1.5; }
 .filters { display:flex; gap:6px; flex-wrap:wrap; }.filter-chip{border:1px solid var(--line);border-radius:999px;background:var(--panel);padding:6px 9px;font-size:10px;cursor:pointer}.filter-chip.on{background:var(--ink);color:white;border-color:var(--ink)}
 .research-hero { padding:35px; background:#ecefe8; border:1px solid #d3d9d2; border-radius:12px; }
 .research-columns { display:grid; grid-template-columns:1fr 1fr; gap:18px; }.research-list{list-style:none;padding:0;margin:0}.research-list li{padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}
+.direction-switcher { display:flex; gap:10px; overflow-x:auto; padding:2px 2px 14px; margin-bottom:12px; }
+.direction-tab { min-width:220px; max-width:320px; text-align:left; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink); padding:13px 15px; cursor:pointer; }
+.direction-tab span,.direction-tab small { display:block; }.direction-tab span { font-weight:650; line-height:1.3; }.direction-tab small { color:var(--muted); margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.direction-tab:hover,.direction-tab.active { border-color:var(--moss); background:#eef2eb; box-shadow:0 0 0 2px color-mix(in srgb,var(--moss) 14%,transparent); }
+.direction-editor { display:grid; gap:13px; margin-top:15px; }.research-notes,.research-list-editor { min-height:150px; }.modal-actions { display:flex; justify-content:flex-end; margin-top:18px; }.topic-keywords { display:flex; flex-wrap:wrap; gap:9px; margin-top:18px; }
 .gap-box { border:1px dashed #b5bbb4; background:transparent; }
 .agent-shell { display:grid; grid-template-columns:minmax(0,1fr) 310px; gap:16px; min-height:620px; }
 .chat { display:flex; flex-direction:column; min-height:620px; }.chat-log{flex:1;padding:12px 0 28px;display:grid;align-content:start;gap:18px}.message{max-width:84%;line-height:1.65;font-size:14px}.message.user{margin-left:auto;background:#ebece6;padding:12px 15px;border-radius:12px 12px 2px 12px}.message.agent{padding-left:38px;position:relative}.message.agent:before{content:"RG";position:absolute;left:0;top:0;width:27px;height:27px;border-radius:50%;background:var(--ink);color:white;display:grid;place-items:center;font:9px var(--font-geist-mono)}
