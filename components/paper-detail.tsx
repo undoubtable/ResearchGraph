@@ -105,9 +105,6 @@ export function PaperDetail({ id }: { id: string }) {
             <p className="subtle">{paper.authors.join(", ")}</p>
           </div>
           <div className="top-actions">
-            <button className="btn" disabled={analyzing} onClick={analyzeContent}>
-              {analyzing ? "分析中…" : paper.attachmentName ? "分析本地 PDF" : "根据摘要自动填写"}
-            </button>
             {paper.attachmentName && <button className="btn primary" onClick={openLocalFile}>打开本地 PDF</button>}
             {paper.pdfUrl && <a className="btn primary" href={paper.pdfUrl} target="_blank" rel="noreferrer">打开 PDF ↗</a>}
             {paperSourceUrl(paper) && <a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文页面 ↗</a>}
@@ -117,6 +114,15 @@ export function PaperDetail({ id }: { id: string }) {
         {analysisNotice && <div className="notice" style={{ marginBottom: 16 }}>{analysisNotice}</div>}
         <div className="detail-layout">
           <div className="card">
+            <section className="analysis-callout">
+              <div>
+                <span className="eyebrow">论文内容自动整理</span>
+                <p>自动补全研究问题、方法、数据集、贡献、结果、局限和未来工作，不覆盖你已经修改的内容。</p>
+              </div>
+              <button className="btn primary" disabled={analyzing} onClick={analyzeContent}>
+                {analyzing ? "正在分析…" : paper.attachmentName ? "分析本地 PDF" : "根据摘要自动填写"}
+              </button>
+            </section>
             <Section title="研究问题" text={paper.researchQuestion} />
             <Section title="研究方法" text={paper.methodSummary} />
             <Section title="数据集" text={paper.dataSummary} />
