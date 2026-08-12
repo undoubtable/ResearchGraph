@@ -16,6 +16,7 @@ import {
   loadLocalPapers,
   saveLocalPapers,
 } from "@/lib/local-library";
+import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
 import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper, ReadingStatus } from "@/lib/types";
 import { AppShell } from "./app-shell";
@@ -65,18 +66,31 @@ export function PaperLibrary() {
     saveLocalPapers(papers);
   };
 
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const source = String(form.get("source")).trim();
+    const uploaded = form.get("pdfFile");
+    const pdfFile = uploaded instanceof File && uploaded.size > 0 ? uploaded : undefined;
+    if (!editing && !source && !pdfFile) {
+      setNotice("请上传一个 PDF 文件，或者粘贴论文链接。 ");
+      return;
+    }
     const doiFromSource = source
       .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
       .replace(/^doi:\s*/i, "");
     const sourceIsDoi = /^10\.\d{4,9}\//i.test(doiFromSource);
+    const id = editing?.id ?? crypto.randomUUID();
+    const enteredTitle = String(form.get("title")).trim();
+    const linkTitle = source
+      ? decodeURIComponent(source.split(/[/?#]/).filter(Boolean).at(-1) || "链接论文")
+          .replace(/[-_]+/g, " ")
+          .replace(/\.pdf$/i, "")
+      : "";
     const paper: Paper = {
       ...editing,
-      id: editing?.id ?? crypto.randomUUID(),
-      title: String(form.get("title")).trim(),
+      id,
+      title: enteredTitle || pdfFile?.name.replace(/\.pdf$/i, "") || editing?.title || linkTitle,
       authors: String(form.get("authors"))
         .split(/[,，]/)
         .map((value) => value.trim())
@@ -85,6 +99,7 @@ export function PaperLibrary() {
       venue: String(form.get("venue")).trim(),
       doi: sourceIsDoi ? doiFromSource : "",
       url: source && !sourceIsDoi ? source : "",
+      attachmentName: pdfFile?.name || editing?.attachmentName,
       tags: String(form.get("tags"))
         .split(/[,，]/)
         .map((value) => value.trim())
@@ -97,6 +112,14 @@ export function PaperLibrary() {
       updatedAt: new Date().toISOString().slice(0, 10),
       isDemo: false,
     };
+    if (pdfFile) {
+      try {
+        await savePaperFile(id, pdfFile);
+      } catch {
+        setNotice("PDF 保存失败，可能是浏览器存储空间不足。论文信息尚未保存。 ");
+        return;
+      }
+    }
     const next = editing
       ? items.map((item) => (item.id === editing.id ? paper : item))
       : [paper, ...items];
@@ -105,10 +128,23 @@ export function PaperLibrary() {
     setNotice("已保存到这台电脑。 ");
   };
 
-  const remove = (id: string) => {
+  const remove = async (id: string) => {
     if (!window.confirm("确定删除这篇论文？建议先导出备份。")) return;
+    await deletePaperFile(id);
     persist(items.filter((paper) => paper.id !== id));
     setNotice("论文已从本地文献库删除。 ");
+  };
+
+  const openLocalFile = async (paper: Paper) => {
+    const tab = window.open("about:blank", "_blank");
+    const fileUrl = await getPaperFileUrl(paper.id);
+    if (fileUrl && tab) {
+      tab.location.href = fileUrl;
+      window.setTimeout(() => URL.revokeObjectURL(fileUrl), 60_000);
+    } else {
+      tab?.close();
+      setNotice("没有找到这篇论文的本地文件，请重新编辑并上传。 ");
+    }
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -135,7 +171,7 @@ export function PaperLibrary() {
           <div>
             <h1>文献库</h1>
             <p className="subtle">
-              论文保存在当前浏览器的本地存储中，刷新和重启后仍会保留。
+              论文信息和上传的 PDF 都保存在当前浏览器中，刷新和重启后仍会保留。
             </p>
           </div>
           <div className="top-actions">
@@ -159,6 +195,7 @@ export function PaperLibrary() {
         </div>
 
         {notice && <div className="notice" style={{ marginBottom: 16 }}>{notice}</div>}
+        <div className="notice" style={{ marginBottom: 16 }}>JSON 备份只包含论文信息和笔记，不包含上传的 PDF 原文件；重要 PDF 请同时保留在电脑文件夹中。</div>
 
         <div className="search-row">
           <input
@@ -224,6 +261,7 @@ export function PaperLibrary() {
                   {statusLabel[paper.readingStatus]}
                 </span>
                 <div>
+                  {paper.attachmentName && <><button className="btn" onClick={() => openLocalFile(paper)}>打开本地 PDF</button>{" "}</>}
                   {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开原文 ↗</a>{" "}</>}
                   <button className="btn" onClick={() => setEditing(paper)}>编辑</button>{" "}
                   <button className="btn danger" onClick={() => remove(paper.id)}>删除</button>
@@ -249,16 +287,21 @@ export function PaperLibrary() {
                 </button>
               </div>
               <div className="form-grid">
-                <label className="label wide">论文标题<input required name="title" className="field" defaultValue={editing?.title} placeholder="粘贴或输入论文标题" /></label>
-                <label className="label wide">原文链接或 DOI<input name="source" className="field" defaultValue={editing?.doi || editing?.url} placeholder="粘贴网页链接，或输入 10.xxxx/xxxxx" /></label>
-                <label className="label wide">作者<input name="authors" className="field" defaultValue={editing?.authors.join(", ")} placeholder="多位作者用逗号分隔（可选）" /></label>
-                <label className="label">年份<input name="year" type="number" className="field" defaultValue={editing?.year} /></label>
-                <label className="label">阅读状态<select name="status" className="field" defaultValue={editing?.readingStatus ?? "to_read"}><option value="to_read">待读</option><option value="reading">阅读中</option><option value="read">已读</option></select></label>
-                <label className="label wide">标签（逗号分隔）<input name="tags" className="field" defaultValue={editing?.tags.join(", ")} /></label>
-                <label className="label wide">一句话总结<textarea name="summary" className="field" defaultValue={editing?.mySummary} /></label>
+                <label className="label wide upload-box">上传本地 PDF
+                  <input name="pdfFile" type="file" accept="application/pdf,.pdf" className="field" />
+                  <span>{editing?.attachmentName ? `当前文件：${editing.attachmentName}（选择新文件可替换）` : "PDF 将保存在这台电脑的浏览器中"}</span>
+                </label>
+                <div className="wide source-divider"><span>或者</span></div>
+                <label className="label wide">粘贴论文链接或 DOI<input name="source" className="field" defaultValue={editing?.doi || editing?.url} placeholder="https://… 或 10.xxxx/xxxxx" /></label>
                 <details className="wide optional-fields">
-                  <summary>更多信息（可选）</summary>
+                  <summary>补充论文信息（全部可选）</summary>
                   <div className="form-grid" style={{ marginTop: 14 }}>
+                    <label className="label wide">论文标题<input name="title" className="field" defaultValue={editing?.title} placeholder="不填则使用 PDF 文件名或链接末尾" /></label>
+                    <label className="label wide">作者<input name="authors" className="field" defaultValue={editing?.authors.join(", ")} placeholder="多位作者用逗号分隔" /></label>
+                    <label className="label">年份<input name="year" type="number" className="field" defaultValue={editing?.year} /></label>
+                    <label className="label">阅读状态<select name="status" className="field" defaultValue={editing?.readingStatus ?? "to_read"}><option value="to_read">待读</option><option value="reading">阅读中</option><option value="read">已读</option></select></label>
+                    <label className="label wide">标签（逗号分隔）<input name="tags" className="field" defaultValue={editing?.tags.join(", ")} /></label>
+                    <label className="label wide">一句话总结<textarea name="summary" className="field" defaultValue={editing?.mySummary} /></label>
                     <label className="label wide">发表来源<input name="venue" className="field" defaultValue={editing?.venue} placeholder="期刊、会议或预印本平台" /></label>
                     <label className="label wide">研究问题<textarea name="researchQuestion" className="field" defaultValue={editing?.researchQuestion} /></label>
                     <label className="label wide">方法概述<textarea name="methodSummary" className="field" defaultValue={editing?.methodSummary} /></label>

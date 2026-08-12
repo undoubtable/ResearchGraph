@@ -4,7 +4,7 @@ export type RelationType = "USES" | "STUDIES" | "USES_CONCEPT" | "USES_DATASET" 
 export type CreatedBy = "user" | "ai" | "import";
 
 export interface Paper {
-  id: string; title: string; authors: string[]; year?: number; venue?: string; doi?: string; url?: string;
+  id: string; title: string; authors: string[]; year?: number; venue?: string; doi?: string; url?: string; attachmentName?: string;
   abstract?: string; researchQuestion?: string; methodSummary?: string; dataSummary?: string;
   mainContributions?: string; mainResults?: string; limitations?: string; futureWork?: string;
   readingStatus: ReadingStatus; rating?: number; tags: string[]; mySummary?: string;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { edges, nodes, paperById } from "@/lib/demo-data";
 import { loadLocalPapers, updateLocalPaper } from "@/lib/local-library";
+import { getPaperFileUrl } from "@/lib/local-files";
 import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper } from "@/lib/types";
 import { createdByLabel, relationTypeLabel } from "@/lib/ui-labels";
@@ -49,6 +50,18 @@ export function PaperDetail({ id }: { id: string }) {
     setSaved(true);
   };
 
+  const openLocalFile = async () => {
+    const tab = window.open("about:blank", "_blank");
+    const fileUrl = await getPaperFileUrl(id);
+    if (fileUrl && tab) {
+      tab.location.href = fileUrl;
+      window.setTimeout(() => URL.revokeObjectURL(fileUrl), 60_000);
+    } else {
+      tab?.close();
+      window.alert("没有找到这篇论文的本地文件，请返回文献库重新上传。 ");
+    }
+  };
+
   return (
     <AppShell section="论文详情">
       <div className="content">
@@ -59,6 +72,7 @@ export function PaperDetail({ id }: { id: string }) {
             <p className="subtle">{paper.authors.join(", ")}</p>
           </div>
           <div className="top-actions">
+            {paper.attachmentName && <button className="btn primary" onClick={openLocalFile}>打开本地 PDF</button>}
             {paperSourceUrl(paper) && <a className="btn primary" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文原文 ↗</a>}
             <span className={`status ${paper.readingStatus}`}>{paper.readingStatus === "read" ? "已读" : paper.readingStatus === "reading" ? "阅读中" : "待读"}</span>
           </div>
