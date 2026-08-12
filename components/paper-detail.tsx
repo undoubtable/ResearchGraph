@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { edges, nodes, paperById } from "@/lib/demo-data";
 import { loadLocalPapers, updateLocalPaper } from "@/lib/local-library";
+import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper } from "@/lib/types";
+import { createdByLabel, relationTypeLabel } from "@/lib/ui-labels";
 import { AppShell } from "./app-shell";
 
 export function PaperDetail({ id }: { id: string }) {
@@ -27,7 +29,7 @@ export function PaperDetail({ id }: { id: string }) {
 
   if (!paper) {
     return (
-      <AppShell section="Paper Detail">
+      <AppShell section="论文详情">
         <div className="content">
           <h1>未找到论文</h1>
           <Link className="btn" href="/library">返回文献库</Link>
@@ -48,27 +50,30 @@ export function PaperDetail({ id }: { id: string }) {
   };
 
   return (
-    <AppShell section="Paper Detail">
+    <AppShell section="论文详情">
       <div className="content">
         <div className="page-head">
           <div>
-            <Link href="/library" className="meta">← Literature Library</Link>
+            <Link href="/library" className="meta">← 返回文献库</Link>
             <h1 style={{ maxWidth: 850, marginTop: 14 }}>{paper.title}</h1>
             <p className="subtle">{paper.authors.join(", ")}</p>
           </div>
-          <span className={`status ${paper.readingStatus}`}>{paper.readingStatus}</span>
+          <div className="top-actions">
+            {paperSourceUrl(paper) && <a className="btn primary" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文原文 ↗</a>}
+            <span className={`status ${paper.readingStatus}`}>{paper.readingStatus === "read" ? "已读" : paper.readingStatus === "reading" ? "阅读中" : "待读"}</span>
+          </div>
         </div>
         <div className="detail-layout">
           <div className="card">
-            <Section title="Research Question" text={paper.researchQuestion} />
-            <Section title="Method" text={paper.methodSummary} />
-            <Section title="Dataset" text={paper.dataSummary} />
-            <Section title="Contributions" text={paper.mainContributions} />
-            <Section title="Results" text={paper.mainResults} />
-            <Section title="Limitations" text={paper.limitations} />
-            <Section title="Future Work" text={paper.futureWork} />
+            <Section title="研究问题" text={paper.researchQuestion} />
+            <Section title="研究方法" text={paper.methodSummary} />
+            <Section title="数据集" text={paper.dataSummary} />
+            <Section title="主要贡献" text={paper.mainContributions} />
+            <Section title="主要结果" text={paper.mainResults} />
+            <Section title="局限性" text={paper.limitations} />
+            <Section title="未来工作" text={paper.futureWork} />
             <section className="detail-section">
-              <h2>My Notes</h2>
+              <h2>我的笔记</h2>
               <textarea
                 className="field"
                 value={note}
@@ -82,34 +87,34 @@ export function PaperDetail({ id }: { id: string }) {
               </button>
             </section>
             <section className="detail-section">
-              <h2>Inspiration</h2>
+              <h2>研究灵感</h2>
               <div className="note-box">{paper.inspiration || "尚未记录灵感。"}</div>
             </section>
             <section className="detail-section">
-              <h2>Graph Relations</h2>
+              <h2>图谱关系</h2>
               {relations.length ? relations.map((relation) => (
                 <div className="list-row" key={relation.id}>
-                  <div><strong>{relation.relationType}</strong><div className="meta">{relation.evidence}</div></div>
-                  <span className="tag">{relation.createdBy} · {Math.round(relation.confidence * 100)}%</span>
+                  <div><strong>{relationTypeLabel[relation.relationType]}</strong><div className="meta">{relation.evidence}</div></div>
+                  <span className="tag">{createdByLabel[relation.createdBy]} · {Math.round(relation.confidence * 100)}%</span>
                 </div>
               )) : <p>尚无图关系。</p>}
             </section>
           </div>
           <aside className="card side-card">
-            <span className="eyebrow">Metadata</span>
+            <span className="eyebrow">书目信息</span>
             <div style={{ marginTop: 12 }}>
-              <KV k="Year" v={paper.year} />
-              <KV k="Venue" v={paper.venue} />
+              <KV k="年份" v={paper.year} />
+              <KV k="发表来源" v={paper.venue} />
               <KV k="DOI" v={paper.doi || "—"} />
-              <KV k="Rating" v={paper.rating ? "★".repeat(paper.rating) : "—"} />
-              <KV k="Updated" v={paper.updatedAt} />
+              <KV k="评分" v={paper.rating ? "★".repeat(paper.rating) : "—"} />
+              <KV k="更新时间" v={paper.updatedAt} />
             </div>
             <div className="tag-row">
               {paper.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
-              {paper.isDemo && <span className="tag demo">DEMO DATA</span>}
+              {paper.isDemo && <span className="tag demo">演示数据</span>}
             </div>
             <hr style={{ border: 0, borderTop: "1px solid var(--line)", margin: "18px 0" }} />
-            <span className="eyebrow">My Summary</span>
+            <span className="eyebrow">我的总结</span>
             <p className="subtle" style={{ marginTop: 10 }}>{paper.mySummary}</p>
             <Link href="/graph" className="btn" style={{ width: "100%" }}>在图谱中查看</Link>
           </aside>

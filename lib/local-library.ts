@@ -12,7 +12,15 @@ export function loadLocalPapers(): Paper[] {
   }
   try {
     const parsed = JSON.parse(stored) as unknown;
-    return Array.isArray(parsed) ? (parsed as Paper[]) : demoPapers;
+    if (!Array.isArray(parsed)) return demoPapers;
+    return (parsed as Paper[]).map((paper) => {
+      const demo = demoPapers.find((item) => item.id === paper.id);
+      return {
+        ...paper,
+        doi: paper.doi || demo?.doi,
+        url: paper.url || demo?.url,
+      };
+    });
   } catch {
     return demoPapers;
   }

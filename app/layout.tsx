@@ -14,21 +14,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "ResearchGraph — Personal AI Research Knowledge System",
-    template: "%s · ResearchGraph",
+    default: "ResearchGraph 科研知识图谱 — 个人 AI 科研知识管理系统",
+    template: "%s · ResearchGraph 科研知识图谱",
   },
-  description: "Turn papers, notes, and research ideas into an evidence-grounded knowledge graph.",
+  description: "把论文、笔记和研究构想整理成有证据支撑的个人科研知识图谱。",
   metadataBase: new URL("https://researchgraph.local"),
   openGraph: {
-    title: "ResearchGraph",
-    description: "Personal AI Research Knowledge System",
+    title: "ResearchGraph 科研知识图谱",
+    description: "个人 AI 科研知识管理系统",
     type: "website",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "ResearchGraph knowledge graph" }],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "科研知识图谱" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ResearchGraph",
-    description: "Personal AI Research Knowledge System",
+    title: "ResearchGraph 科研知识图谱",
+    description: "个人 AI 科研知识管理系统",
     images: ["/og.png"],
   },
   icons: {

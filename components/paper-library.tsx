@@ -16,6 +16,7 @@ import {
   loadLocalPapers,
   saveLocalPapers,
 } from "@/lib/local-library";
+import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper, ReadingStatus } from "@/lib/types";
 import { AppShell } from "./app-shell";
 
@@ -67,6 +68,11 @@ export function PaperLibrary() {
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const source = String(form.get("source")).trim();
+    const doiFromSource = source
+      .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+      .replace(/^doi:\s*/i, "");
+    const sourceIsDoi = /^10\.\d{4,9}\//i.test(doiFromSource);
     const paper: Paper = {
       ...editing,
       id: editing?.id ?? crypto.randomUUID(),
@@ -77,7 +83,8 @@ export function PaperLibrary() {
         .filter(Boolean),
       year: Number(form.get("year")) || undefined,
       venue: String(form.get("venue")).trim(),
-      doi: String(form.get("doi")).trim(),
+      doi: sourceIsDoi ? doiFromSource : "",
+      url: source && !sourceIsDoi ? source : "",
       tags: String(form.get("tags"))
         .split(/[,，]/)
         .map((value) => value.trim())
@@ -122,11 +129,11 @@ export function PaperLibrary() {
   const topics = [...new Set(items.flatMap((paper) => paper.tags))].sort();
 
   return (
-    <AppShell section="Local Literature Library">
+    <AppShell section="本地文献库">
       <div className="content">
         <div className="page-head">
           <div>
-            <h1>Literature Library</h1>
+            <h1>文献库</h1>
             <p className="subtle">
               论文保存在当前浏览器的本地存储中，刷新和重启后仍会保留。
             </p>
@@ -196,7 +203,7 @@ export function PaperLibrary() {
         <div className="paper-grid">
           {filtered.map((paper) => (
             <article className="card paper-card" key={paper.id}>
-              <div className="meta">{paper.year || "年份未填"} · {paper.venue || "Venue 未填"}</div>
+              <div className="meta">{paper.year || "年份未填"} · {paper.venue || "发表来源未填"}</div>
               <Link
                 href={`/library/${paper.id}`}
                 className="paper-title"
@@ -210,13 +217,14 @@ export function PaperLibrary() {
               </p>
               <div className="tag-row">
                 {paper.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
-                {paper.isDemo && <span className="tag demo">DEMO</span>}
+                {paper.isDemo && <span className="tag demo">演示数据</span>}
               </div>
               <div className="paper-foot">
                 <span className={`status ${paper.readingStatus}`}>
                   {statusLabel[paper.readingStatus]}
                 </span>
                 <div>
+                  {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开原文 ↗</a>{" "}</>}
                   <button className="btn" onClick={() => setEditing(paper)}>编辑</button>{" "}
                   <button className="btn danger" onClick={() => remove(paper.id)}>删除</button>
                 </div>
@@ -241,17 +249,22 @@ export function PaperLibrary() {
                 </button>
               </div>
               <div className="form-grid">
-                <label className="label wide">标题<input required name="title" className="field" defaultValue={editing?.title} /></label>
-                <label className="label wide">作者（逗号分隔）<input name="authors" className="field" defaultValue={editing?.authors.join(", ")} /></label>
+                <label className="label wide">论文标题<input required name="title" className="field" defaultValue={editing?.title} placeholder="粘贴或输入论文标题" /></label>
+                <label className="label wide">原文链接或 DOI<input name="source" className="field" defaultValue={editing?.doi || editing?.url} placeholder="粘贴网页链接，或输入 10.xxxx/xxxxx" /></label>
+                <label className="label wide">作者<input name="authors" className="field" defaultValue={editing?.authors.join(", ")} placeholder="多位作者用逗号分隔（可选）" /></label>
                 <label className="label">年份<input name="year" type="number" className="field" defaultValue={editing?.year} /></label>
-                <label className="label">Venue<input name="venue" className="field" defaultValue={editing?.venue} /></label>
-                <label className="label">DOI<input name="doi" className="field" defaultValue={editing?.doi} /></label>
                 <label className="label">阅读状态<select name="status" className="field" defaultValue={editing?.readingStatus ?? "to_read"}><option value="to_read">待读</option><option value="reading">阅读中</option><option value="read">已读</option></select></label>
                 <label className="label wide">标签（逗号分隔）<input name="tags" className="field" defaultValue={editing?.tags.join(", ")} /></label>
                 <label className="label wide">一句话总结<textarea name="summary" className="field" defaultValue={editing?.mySummary} /></label>
-                <label className="label wide">Research Question<textarea name="researchQuestion" className="field" defaultValue={editing?.researchQuestion} /></label>
-                <label className="label wide">Method Summary<textarea name="methodSummary" className="field" defaultValue={editing?.methodSummary} /></label>
-                <label className="label wide">我的笔记<textarea name="notes" className="field" defaultValue={editing?.myNotes} /></label>
+                <details className="wide optional-fields">
+                  <summary>更多信息（可选）</summary>
+                  <div className="form-grid" style={{ marginTop: 14 }}>
+                    <label className="label wide">发表来源<input name="venue" className="field" defaultValue={editing?.venue} placeholder="期刊、会议或预印本平台" /></label>
+                    <label className="label wide">研究问题<textarea name="researchQuestion" className="field" defaultValue={editing?.researchQuestion} /></label>
+                    <label className="label wide">方法概述<textarea name="methodSummary" className="field" defaultValue={editing?.methodSummary} /></label>
+                    <label className="label wide">我的笔记<textarea name="notes" className="field" defaultValue={editing?.myNotes} /></label>
+                  </div>
+                </details>
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
                 <button className="btn primary">保存到本地</button>

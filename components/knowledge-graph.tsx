@@ -14,6 +14,7 @@ import type {
   NodeType,
   RelationType,
 } from "@/lib/types";
+import { createdByLabel, relationTypeLabel } from "@/lib/ui-labels";
 import { AppShell } from "./app-shell";
 
 const positions: Record<string, [number, number]> = {
@@ -50,6 +51,15 @@ const relationTypes: RelationType[] = [
   "CONTRADICTS",
   "RELATED_TO",
 ];
+
+const nodeTypeLabel: Record<NodeType, string> = {
+  Paper: "论文",
+  Method: "方法",
+  Problem: "问题",
+  Concept: "概念",
+  Dataset: "数据集",
+  ResearchIdea: "研究构想",
+};
 
 export function KnowledgeGraph() {
   const [allEdges, setAllEdges] = useState(demoEdges);
@@ -138,11 +148,11 @@ export function KnowledgeGraph() {
   };
 
   return (
-    <AppShell section="Knowledge Graph">
+    <AppShell section="知识图谱">
       <div className="content">
         <div className="page-head">
           <div>
-            <h1>Knowledge Graph</h1>
+            <h1>知识图谱</h1>
             <p className="subtle">
               从“谁引用谁”继续深入：论文如何使用方法、研究问题、依赖概念，以及支持你的研究构想。
             </p>
@@ -160,7 +170,7 @@ export function KnowledgeGraph() {
                 onClick={() => toggleNodeType(type)}
                 className={`filter-chip ${enabled.has(type) ? "on" : ""}`}
               >
-                {type}
+                {nodeTypeLabel[type]}
               </button>
             ))}
           </div>
@@ -177,7 +187,7 @@ export function KnowledgeGraph() {
               <option value="all">全部关系</option>
               {relationTypes.map((relation) => (
                 <option key={relation} value={relation}>
-                  {relation}
+                  {relationTypeLabel[relation]}
                 </option>
               ))}
             </select>
@@ -219,7 +229,7 @@ export function KnowledgeGraph() {
                   setPan({ x: 0, y: 0 });
                 }}
               >
-                Reset
+                重置
               </button>
             </div>
             <div
@@ -241,7 +251,7 @@ export function KnowledgeGraph() {
                   }}
                   onClick={() => setSelected(node)}
                 >
-                  <small>{node.type}</small>
+                  <small>{nodeTypeLabel[node.type]}</small>
                   {node.label}
                 </button>
               ))}
@@ -249,9 +259,9 @@ export function KnowledgeGraph() {
           </div>
 
           <aside className="card">
-            <span className="eyebrow">Selected node</span>
+            <span className="eyebrow">当前节点</span>
             <h2 style={{ marginTop: 12 }}>{selected.label}</h2>
-            <span className="tag">{selected.type}</span>
+            <span className="tag">{nodeTypeLabel[selected.type]}</span>
             <p className="subtle" style={{ marginTop: 16 }}>
               {selected.description ||
                 "该节点由演示知识图谱提供。点击其他节点查看关联信息。"}
@@ -263,7 +273,7 @@ export function KnowledgeGraph() {
                 margin: "18px 0",
               }}
             />
-            <span className="eyebrow">Relations</span>
+            <span className="eyebrow">关联关系</span>
             <div className="list">
               {allEdges
                 .filter(
@@ -274,11 +284,11 @@ export function KnowledgeGraph() {
                   <div className="list-row" key={edge.id}>
                     <div>
                       <strong style={{ fontSize: 11 }}>
-                        {edge.relationType}
+                        {relationTypeLabel[edge.relationType]}
                       </strong>
                       <div className="meta">{edge.evidence}</div>
                     </div>
-                    <span className="tag">{edge.createdBy}</span>
+                    <span className="tag">{createdByLabel[edge.createdBy]}</span>
                   </div>
                 ))}
             </div>
@@ -300,7 +310,7 @@ export function KnowledgeGraph() {
               </div>
               <div className="form-grid">
                 <label className="label">
-                  Source
+                  起点
                   <select className="field" name="source">
                     {demoNodes.map((node) => (
                       <option value={node.id} key={node.id}>
@@ -310,7 +320,7 @@ export function KnowledgeGraph() {
                   </select>
                 </label>
                 <label className="label">
-                  Target
+                  终点
                   <select className="field" name="target">
                     {demoNodes.map((node) => (
                       <option value={node.id} key={node.id}>
@@ -320,23 +330,23 @@ export function KnowledgeGraph() {
                   </select>
                 </label>
                 <label className="label">
-                  Relation
+                  关系类型
                   <select className="field" name="relation">
                     {relationTypes.map((relation) => (
-                      <option key={relation}>{relation}</option>
+                      <option key={relation} value={relation}>{relationTypeLabel[relation]}</option>
                     ))}
                   </select>
                 </label>
                 <label className="label">
-                  Created by
+                  创建方式
                   <select className="field" name="createdBy">
-                    <option>user</option>
-                    <option>ai</option>
-                    <option>import</option>
+                    <option value="user">用户创建</option>
+                    <option value="ai">AI 创建</option>
+                    <option value="import">导入</option>
                   </select>
                 </label>
                 <label className="label wide">
-                  Evidence
+                  支持证据
                   <textarea
                     required
                     className="field"
@@ -345,7 +355,7 @@ export function KnowledgeGraph() {
                   />
                 </label>
                 <label className="label wide">
-                  Confidence
+                  可信度（0 到 1）
                   <input
                     className="field"
                     name="confidence"
@@ -386,7 +396,7 @@ function Edge({ edge }: { edge: GraphEdge }) {
         transform: `rotate(${angle}deg)`,
       }}
     >
-      <span className="edge-label">{edge.relationType}</span>
+      <span className="edge-label">{relationTypeLabel[edge.relationType]}</span>
     </div>
   );
 }
