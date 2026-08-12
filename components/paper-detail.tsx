@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { edges, nodes, paperById } from "@/lib/demo-data";
 import { loadLocalPapers, updateLocalPaper } from "@/lib/local-library";
-import { getPaperFileUrl } from "@/lib/local-files";
+import { getPaperFile, getPaperFileUrl } from "@/lib/local-files";
+import { analyzePaperText, extractPdfText, fillMissingPaperAnalysis } from "@/lib/paper-analysis";
 import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper } from "@/lib/types";
 import { createdByLabel, relationTypeLabel } from "@/lib/ui-labels";
@@ -14,6 +15,8 @@ export function PaperDetail({ id }: { id: string }) {
   const [paper, setPaper] = useState<Paper | undefined>(() => paperById(id));
   const [note, setNote] = useState(paper?.myNotes ?? "");
   const [saved, setSaved] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisNotice, setAnalysisNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -62,6 +65,36 @@ export function PaperDetail({ id }: { id: string }) {
     }
   };
 
+  const analyzeContent = async () => {
+    setAnalyzing(true);
+    setAnalysisNotice(paper.attachmentName ? "正在本地读取 PDF 并整理内容…" : "正在根据摘要整理内容…");
+    try {
+      const localFile = paper.attachmentName ? await getPaperFile(id) : undefined;
+      const sourceText = localFile ? await extractPdfText(localFile) : paper.abstract || "";
+      if (!sourceText) {
+        setAnalysisNotice("目前没有本地 PDF 或公开摘要。请先返回文献库上传 PDF，或刷新论文资料。 ");
+        return;
+      }
+      const filled = fillMissingPaperAnalysis(paper, analyzePaperText(sourceText));
+      const count = Object.keys(filled).length;
+      if (!count) {
+        setAnalysisNotice("没有发现可可靠提取的新内容；已有手工内容不会被覆盖。 ");
+        return;
+      }
+      const updated = updateLocalPaper(id, {
+        ...filled,
+        analysisSource: localFile ? "local_pdf" : "abstract",
+        analysisUpdatedAt: new Date().toISOString(),
+      });
+      if (updated) setPaper(updated);
+      setAnalysisNotice(`已自动补全 ${count} 项；请结合原文复核，手工内容没有被覆盖。`);
+    } catch {
+      setAnalysisNotice("论文内容分析失败；PDF 可能是扫描图片，或文件暂时无法读取。 ");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   return (
     <AppShell section="论文详情">
       <div className="content">
@@ -72,12 +105,16 @@ export function PaperDetail({ id }: { id: string }) {
             <p className="subtle">{paper.authors.join(", ")}</p>
           </div>
           <div className="top-actions">
+            <button className="btn" disabled={analyzing} onClick={analyzeContent}>
+              {analyzing ? "分析中…" : paper.attachmentName ? "分析本地 PDF" : "根据摘要自动填写"}
+            </button>
             {paper.attachmentName && <button className="btn primary" onClick={openLocalFile}>打开本地 PDF</button>}
             {paper.pdfUrl && <a className="btn primary" href={paper.pdfUrl} target="_blank" rel="noreferrer">打开 PDF ↗</a>}
             {paperSourceUrl(paper) && <a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文页面 ↗</a>}
             <span className={`status ${paper.readingStatus}`}>{paper.readingStatus === "read" ? "已读" : paper.readingStatus === "reading" ? "阅读中" : "待读"}</span>
           </div>
         </div>
+        {analysisNotice && <div className="notice" style={{ marginBottom: 16 }}>{analysisNotice}</div>}
         <div className="detail-layout">
           <div className="card">
             <Section title="研究问题" text={paper.researchQuestion} />
@@ -123,6 +160,7 @@ export function PaperDetail({ id }: { id: string }) {
               <KV k="DOI" v={paper.doi || "—"} />
               <KV k="评分" v={paper.rating ? "★".repeat(paper.rating) : "—"} />
               <KV k="更新时间" v={paper.updatedAt} />
+              <KV k="内容分析" v={paper.analysisSource === "local_pdf" ? "来自本地 PDF" : paper.analysisSource === "abstract" ? "来自公开摘要" : "尚未分析"} />
             </div>
             <div className="tag-row">
               {[...new Set([...(paper.autoKeywords ?? []), ...paper.tags])].map((tag) => <span className="tag" key={tag}>{tag}</span>)}
@@ -141,7 +179,7 @@ export function PaperDetail({ id }: { id: string }) {
 }
 
 function Section({ title, text }: { title: string; text?: string }) {
-  return <section className="detail-section"><h2>{title}</h2><p>{text || "尚未整理。"}</p></section>;
+  return <section className="detail-section"><h2>{title}</h2><p>{text || "尚未自动提取；可点击页面上方的内容分析按钮。"}</p></section>;
 }
 
 function KV({ k, v }: { k: string; v: unknown }) {

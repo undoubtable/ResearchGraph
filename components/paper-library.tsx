@@ -17,6 +17,7 @@ import {
   saveLocalPapers,
 } from "@/lib/local-library";
 import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
+import { analyzePaperText, fillMissingPaperAnalysis } from "@/lib/paper-analysis";
 import {
   extractPdfSearchText,
   chooseMetadataMatch,
@@ -148,9 +149,22 @@ export function PaperLibrary() {
       myNotes: String(form.get("notes")).trim(),
       researchQuestion: String(form.get("researchQuestion")).trim(),
       methodSummary: String(form.get("methodSummary")).trim(),
+      dataSummary: String(form.get("dataSummary")).trim(),
+      mainContributions: String(form.get("mainContributions")).trim(),
+      mainResults: String(form.get("mainResults")).trim(),
+      limitations: String(form.get("limitations")).trim(),
+      futureWork: String(form.get("futureWork")).trim(),
       updatedAt: new Date().toISOString().slice(0, 10),
       isDemo: false,
     };
+    if (resolvedMetadata?.abstract) {
+      const filledAnalysis = fillMissingPaperAnalysis(paper, analyzePaperText(resolvedMetadata.abstract));
+      Object.assign(paper, filledAnalysis);
+      if (Object.keys(filledAnalysis).length) {
+        paper.analysisSource = "abstract";
+        paper.analysisUpdatedAt = new Date().toISOString();
+      }
+    }
     if (pdfFile) {
       try {
         await savePaperFile(id, pdfFile);
@@ -242,8 +256,12 @@ export function PaperLibrary() {
     const found = match.selected ?? (paper.doi ? results[0] : undefined);
     if (!found) throw new Error("没有找到标题足够接近的公开论文记录");
     const now = new Date().toISOString();
+    const abstract = found.abstract || paper.abstract || "";
+    const analysis = analyzePaperText(abstract);
+    const filledAnalysis = fillMissingPaperAnalysis(paper, analysis);
     return {
       ...paper,
+      ...filledAnalysis,
       title: found.title || paper.title,
       authors: found.authors.length ? found.authors : paper.authors,
       year: found.year || paper.year,
@@ -251,10 +269,12 @@ export function PaperLibrary() {
       doi: found.doi || paper.doi,
       url: found.url || paper.url,
       pdfUrl: found.pdfUrl || paper.pdfUrl,
-      abstract: found.abstract || paper.abstract,
+      abstract: abstract || undefined,
       autoKeywords: found.keywords?.length ? found.keywords : paper.autoKeywords,
       autoSummary: found.summary || paper.autoSummary,
       metadataRefreshedAt: now,
+      analysisSource: Object.keys(filledAnalysis).length ? "abstract" : paper.analysisSource,
+      analysisUpdatedAt: Object.keys(filledAnalysis).length ? now : paper.analysisUpdatedAt,
       updatedAt: now.slice(0, 10),
       isDemo: false,
     } satisfies Paper;
@@ -475,6 +495,11 @@ export function PaperLibrary() {
                     <label className="label wide">发表来源<input name="venue" className="field" defaultValue={editing?.venue} placeholder="期刊、会议或预印本平台" /></label>
                     <label className="label wide">研究问题<textarea name="researchQuestion" className="field" defaultValue={editing?.researchQuestion} /></label>
                     <label className="label wide">方法概述<textarea name="methodSummary" className="field" defaultValue={editing?.methodSummary} /></label>
+                    <label className="label wide">数据集<textarea name="dataSummary" className="field" defaultValue={editing?.dataSummary} /></label>
+                    <label className="label wide">主要贡献<textarea name="mainContributions" className="field" defaultValue={editing?.mainContributions} /></label>
+                    <label className="label wide">主要结果<textarea name="mainResults" className="field" defaultValue={editing?.mainResults} /></label>
+                    <label className="label wide">局限性<textarea name="limitations" className="field" defaultValue={editing?.limitations} /></label>
+                    <label className="label wide">未来工作<textarea name="futureWork" className="field" defaultValue={editing?.futureWork} /></label>
                     <label className="label wide">我的笔记<textarea name="notes" className="field" defaultValue={editing?.myNotes} /></label>
                   </div>
                 </details>

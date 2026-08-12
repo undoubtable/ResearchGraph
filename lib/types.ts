@@ -8,7 +8,8 @@ export interface Paper {
   abstract?: string; researchQuestion?: string; methodSummary?: string; dataSummary?: string;
   mainContributions?: string; mainResults?: string; limitations?: string; futureWork?: string;
   readingStatus: ReadingStatus; rating?: number; tags: string[]; autoKeywords?: string[]; mySummary?: string; autoSummary?: string;
-  myNotes?: string; inspiration?: string; updatedAt: string; metadataRefreshedAt?: string; isDemo?: boolean;
+  myNotes?: string; inspiration?: string; updatedAt: string; metadataRefreshedAt?: string;
+  analysisSource?: "abstract" | "local_pdf"; analysisUpdatedAt?: string; isDemo?: boolean;
 }
 export interface GraphNode { id: string; type: NodeType; label: string; description?: string; paperId?: string; }
 export interface GraphEdge { id: string; source: string; target: string; relationType: RelationType; confidence: number; evidence: string; createdBy: CreatedBy; createdAt: string; }
