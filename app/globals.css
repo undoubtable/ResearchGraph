@@ -61,6 +61,7 @@ h3 { font-size:14px; }
 .direction-card:after { content:""; position:absolute; width:220px; height:220px; border:1px solid rgba(255,255,255,.12); border-radius:50%; right:-65px; bottom:-100px; box-shadow:0 0 0 35px rgba(255,255,255,.025),0 0 0 70px rgba(255,255,255,.02); }
 .direction-card h2 { font-size:26px; max-width:640px; position:relative; z-index:1; }
 .direction-card .subtle { color:#b9c0ba; max-width:680px; position:relative; z-index:1; }
+.direction-card .direction-action { position:relative; z-index:1; margin-top:22px; width:max-content; }
 .topic-bars { display:grid; gap:13px; }
 .topic-line { display:grid; grid-template-columns:150px 1fr 26px; gap:12px; align-items:center; font-size:12px; }
 .bar { height:5px; background:#e5e5de; border-radius:4px; overflow:hidden; }.bar span{display:block;height:100%;background:var(--moss)}
@@ -79,6 +80,12 @@ textarea.field { min-height:110px; resize:vertical; line-height:1.5; }
 .upload-box span { color:var(--muted); font-size:12px; font-weight:400; }
 .source-divider { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:12px; }
 .source-divider::before,.source-divider::after { content:""; height:1px; flex:1; background:var(--line); }
+.source-search-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+.metadata-results { display:grid; gap:8px; max-height:250px; overflow:auto; }
+.metadata-candidate { text-align:left; border:1px solid var(--line); background:var(--panel); padding:11px 12px; border-radius:8px; cursor:pointer; color:var(--ink); }
+.metadata-candidate:hover,.metadata-candidate.selected { border-color:var(--moss); box-shadow:0 0 0 2px color-mix(in srgb,var(--moss) 16%,transparent); }
+.metadata-candidate strong,.metadata-candidate span { display:block; }
+.metadata-candidate span { color:var(--muted); font-size:12px; margin-top:5px; }
 .modal-backdrop { position:fixed; inset:0; background:rgba(18,26,22,.45); display:grid; place-items:center; padding:20px; z-index:30; }
 .modal { width:min(680px,100%); max-height:90vh; overflow:auto; background:var(--panel); border-radius:12px; padding:26px; box-shadow:0 30px 90px rgba(0,0,0,.25); }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }.form-grid .wide{grid-column:1/-1}.label{display:grid;gap:6px;font-size:12px;color:var(--muted)}

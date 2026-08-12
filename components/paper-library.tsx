@@ -17,6 +17,11 @@ import {
   saveLocalPapers,
 } from "@/lib/local-library";
 import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
+import {
+  extractPdfSearchText,
+  type PaperMetadataCandidate,
+  searchPaperMetadata,
+} from "@/lib/paper-metadata";
 import { paperSourceUrl } from "@/lib/paper-link";
 import type { Paper, ReadingStatus } from "@/lib/types";
 import { AppShell } from "./app-shell";
@@ -35,7 +40,12 @@ export function PaperLibrary() {
   const [topic, setTopic] = useState("all");
   const [editing, setEditing] = useState<Paper | null | undefined>(undefined);
   const [notice, setNotice] = useState("");
+  const [metadata, setMetadata] = useState<PaperMetadataCandidate>();
+  const [candidates, setCandidates] = useState<PaperMetadataCandidate[]>([]);
+  const [searchingMetadata, setSearchingMetadata] = useState(false);
+  const [metadataNotice, setMetadataNotice] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -82,6 +92,10 @@ export function PaperLibrary() {
     const sourceIsDoi = /^10\.\d{4,9}\//i.test(doiFromSource);
     const id = editing?.id ?? crypto.randomUUID();
     const enteredTitle = String(form.get("title")).trim();
+    const enteredAuthors = String(form.get("authors"))
+      .split(/[,，]/)
+      .map((value) => value.trim())
+      .filter(Boolean);
     const linkTitle = source
       ? decodeURIComponent(source.split(/[/?#]/).filter(Boolean).at(-1) || "链接论文")
           .replace(/[-_]+/g, " ")
@@ -90,15 +104,12 @@ export function PaperLibrary() {
     const paper: Paper = {
       ...editing,
       id,
-      title: enteredTitle || pdfFile?.name.replace(/\.pdf$/i, "") || editing?.title || linkTitle,
-      authors: String(form.get("authors"))
-        .split(/[,，]/)
-        .map((value) => value.trim())
-        .filter(Boolean),
-      year: Number(form.get("year")) || undefined,
-      venue: String(form.get("venue")).trim(),
-      doi: sourceIsDoi ? doiFromSource : "",
-      url: source && !sourceIsDoi ? source : "",
+      title: enteredTitle || metadata?.title || pdfFile?.name.replace(/\.pdf$/i, "") || editing?.title || linkTitle,
+      authors: enteredAuthors.length ? enteredAuthors : metadata?.authors ?? [],
+      year: Number(form.get("year")) || metadata?.year || undefined,
+      venue: String(form.get("venue")).trim() || metadata?.venue || "",
+      doi: sourceIsDoi ? doiFromSource : metadata?.doi || "",
+      url: source && !sourceIsDoi ? source : metadata?.url || "",
       attachmentName: pdfFile?.name || editing?.attachmentName,
       tags: String(form.get("tags"))
         .split(/[,，]/)
@@ -133,6 +144,50 @@ export function PaperLibrary() {
     await deletePaperFile(id);
     persist(items.filter((paper) => paper.id !== id));
     setNotice("论文已从本地文献库删除。 ");
+  };
+
+  const openEditor = (paper: Paper | null) => {
+    setEditing(paper);
+    setMetadata(undefined);
+    setCandidates([]);
+    setMetadataNotice("");
+  };
+
+  const findMetadata = async (query: string) => {
+    if (!query.trim()) return;
+    setSearchingMetadata(true);
+    setMetadataNotice("正在查询公开学术数据库…");
+    try {
+      const results = await searchPaperMetadata(query);
+      setCandidates(results);
+      if (results.length === 1) setMetadata(results[0]);
+      setMetadataNotice(results.length ? `找到 ${results.length} 条可能匹配的论文，请确认。` : "没有找到匹配结果，仍可直接保存。 ");
+    } catch (error) {
+      setMetadataNotice(error instanceof Error ? error.message : "自动查询失败，仍可直接保存。 ");
+    } finally {
+      setSearchingMetadata(false);
+    }
+  };
+
+  const identifyPdf = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setMetadataNotice("正在本地识别 PDF，并搜索论文信息…");
+    try {
+      await findMetadata(await extractPdfSearchText(file));
+    } catch {
+      await findMetadata(file.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " "));
+    }
+  };
+
+  const searchFromLink = () => {
+    if (!editorRef.current) return;
+    const source = String(new FormData(editorRef.current).get("source") ?? "");
+    if (!source.trim()) {
+      setMetadataNotice("请先粘贴论文链接、DOI 或论文标题。 ");
+      return;
+    }
+    void findMetadata(source);
   };
 
   const openLocalFile = async (paper: Paper) => {
@@ -181,7 +236,7 @@ export function PaperLibrary() {
             <button className="btn" onClick={() => importRef.current?.click()}>
               导入备份
             </button>
-            <button className="btn primary" onClick={() => setEditing(null)}>
+            <button className="btn primary" onClick={() => openEditor(null)}>
               ＋ 添加论文
             </button>
             <input
@@ -263,7 +318,7 @@ export function PaperLibrary() {
                 <div>
                   {paper.attachmentName && <><button className="btn" onClick={() => openLocalFile(paper)}>打开本地 PDF</button>{" "}</>}
                   {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开原文 ↗</a>{" "}</>}
-                  <button className="btn" onClick={() => setEditing(paper)}>编辑</button>{" "}
+                  <button className="btn" onClick={() => openEditor(paper)}>编辑</button>{" "}
                   <button className="btn danger" onClick={() => remove(paper.id)}>删除</button>
                 </div>
               </div>
@@ -279,7 +334,7 @@ export function PaperLibrary() {
               if (event.currentTarget === event.target) setEditing(undefined);
             }}
           >
-            <form className="modal" onSubmit={save}>
+            <form ref={editorRef} className="modal" onSubmit={save}>
               <div className="section-head">
                 <h2>{editing ? "编辑论文" : "添加论文"}</h2>
                 <button type="button" className="btn" onClick={() => setEditing(undefined)}>
@@ -288,11 +343,24 @@ export function PaperLibrary() {
               </div>
               <div className="form-grid">
                 <label className="label wide upload-box">上传本地 PDF
-                  <input name="pdfFile" type="file" accept="application/pdf,.pdf" className="field" />
+                  <input name="pdfFile" type="file" accept="application/pdf,.pdf" className="field" onChange={identifyPdf} />
                   <span>{editing?.attachmentName ? `当前文件：${editing.attachmentName}（选择新文件可替换）` : "PDF 将保存在这台电脑的浏览器中"}</span>
                 </label>
                 <div className="wide source-divider"><span>或者</span></div>
-                <label className="label wide">粘贴论文链接或 DOI<input name="source" className="field" defaultValue={editing?.doi || editing?.url} placeholder="https://… 或 10.xxxx/xxxxx" /></label>
+                <label className="label wide">粘贴论文链接、DOI 或标题
+                  <div className="source-search-row">
+                    <input name="source" className="field" defaultValue={editing?.doi || editing?.url} placeholder="https://…、10.xxxx/xxxxx 或论文标题" />
+                    <button type="button" className="btn" onClick={searchFromLink} disabled={searchingMetadata}>{searchingMetadata ? "正在查询…" : "自动补全信息"}</button>
+                  </div>
+                </label>
+                {metadataNotice && <div className="notice wide">{metadataNotice}</div>}
+                {candidates.length > 0 && <div className="wide metadata-results">
+                  {candidates.map((candidate) => <button type="button" key={candidate.id} className={`metadata-candidate ${metadata?.id === candidate.id ? "selected" : ""}`} onClick={() => setMetadata(candidate)}>
+                    <strong>{candidate.title}</strong>
+                    <span>{candidate.authors.slice(0, 3).join("、") || "作者未知"} · {candidate.year || "年份未知"} · {candidate.venue || "来源未知"}</span>
+                  </button>)}
+                </div>}
+                {metadata && <div className="notice wide">将自动填写：{metadata.title}；{metadata.authors.join("、") || "作者未知"}；{metadata.year || "年份未知"}；{metadata.venue || "来源未知"}{metadata.doi ? `；DOI ${metadata.doi}` : ""}</div>}
                 <details className="wide optional-fields">
                   <summary>补充论文信息（全部可选）</summary>
                   <div className="form-grid" style={{ marginTop: 14 }}>
