@@ -35,6 +35,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .vinext-dev*.log
+.dev-server*.log
 
 # platform and editor files
 .DS_Store
