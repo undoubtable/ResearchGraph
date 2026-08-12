@@ -7,8 +7,8 @@ export interface Paper {
   id: string; title: string; authors: string[]; year?: number; venue?: string; doi?: string; url?: string; pdfUrl?: string; attachmentName?: string;
   abstract?: string; researchQuestion?: string; methodSummary?: string; dataSummary?: string;
   mainContributions?: string; mainResults?: string; limitations?: string; futureWork?: string;
-  readingStatus: ReadingStatus; rating?: number; tags: string[]; mySummary?: string;
-  myNotes?: string; inspiration?: string; updatedAt: string; isDemo?: boolean;
+  readingStatus: ReadingStatus; rating?: number; tags: string[]; autoKeywords?: string[]; mySummary?: string; autoSummary?: string;
+  myNotes?: string; inspiration?: string; updatedAt: string; metadataRefreshedAt?: string; isDemo?: boolean;
 }
 export interface GraphNode { id: string; type: NodeType; label: string; description?: string; paperId?: string; }
 export interface GraphEdge { id: string; source: string; target: string; relationType: RelationType; confidence: number; evidence: string; createdBy: CreatedBy; createdAt: string; }

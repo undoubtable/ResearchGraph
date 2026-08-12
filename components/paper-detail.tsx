@@ -125,12 +125,13 @@ export function PaperDetail({ id }: { id: string }) {
               <KV k="更新时间" v={paper.updatedAt} />
             </div>
             <div className="tag-row">
-              {paper.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
+              {[...new Set([...(paper.autoKeywords ?? []), ...paper.tags])].map((tag) => <span className="tag" key={tag}>{tag}</span>)}
               {paper.isDemo && <span className="tag demo">演示数据</span>}
             </div>
             <hr style={{ border: 0, borderTop: "1px solid var(--line)", margin: "18px 0" }} />
-            <span className="eyebrow">我的总结</span>
-            <p className="subtle" style={{ marginTop: 10 }}>{paper.mySummary}</p>
+            <span className="eyebrow">自动摘要</span>
+            <p className="subtle" style={{ marginTop: 10 }}>{paper.autoSummary || "刷新论文资料后可自动生成。"}</p>
+            {paper.mySummary && <><span className="eyebrow">我的总结</span><p className="subtle" style={{ marginTop: 10 }}>{paper.mySummary}</p></>}
             <Link href="/graph" className="btn" style={{ width: "100%" }}>在图谱中查看</Link>
           </aside>
         </div>
