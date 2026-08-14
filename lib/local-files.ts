@@ -40,6 +40,11 @@ export async function savePaperFile(id: string, file: File) {
 }
 
 export async function getPaperFileUrl(id: string) {
+  const record = await getPaperFile(id);
+  return record ? URL.createObjectURL(record) : undefined;
+}
+
+export async function getPaperFile(id: string) {
   const database = await openDatabase();
   const record = await new Promise<StoredPaperFile | undefined>((resolve, reject) => {
     const request = database.transaction(STORE_NAME).objectStore(STORE_NAME).get(id);
@@ -47,7 +52,7 @@ export async function getPaperFileUrl(id: string) {
     request.onerror = () => reject(request.error);
   });
   database.close();
-  return record ? URL.createObjectURL(record.blob) : undefined;
+  return record?.blob;
 }
 
 export async function deletePaperFile(id: string) {

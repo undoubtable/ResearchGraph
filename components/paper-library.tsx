@@ -17,6 +17,8 @@ import {
   saveLocalPapers,
 } from "@/lib/local-library";
 import { deletePaperFile, getPaperFileUrl, savePaperFile } from "@/lib/local-files";
+import { analyzePaperText, fillMissingPaperAnalysis } from "@/lib/paper-analysis";
+import { bilingualizeKeywords, summarizePaperInChinese } from "@/lib/paper-localization";
 import {
   extractPdfSearchText,
   chooseMetadataMatch,
@@ -33,6 +35,14 @@ const statusLabel: Record<ReadingStatus, string> = {
   read: "已读",
 };
 
+function paperKeywords(paper: Paper) {
+  return [...new Set([...(paper.autoKeywords ?? []), ...paper.tags])];
+}
+
+function paperSearchText(paper: Paper) {
+  return `${paper.title} ${paper.authors.join(" ")} ${paperKeywords(paper).join(" ")} ${paper.autoSummary ?? ""} ${paper.mySummary ?? ""}`;
+}
+
 export function PaperLibrary() {
   const [items, setItems] = useState(demoPapers);
   const [query, setQuery] = useState("");
@@ -44,6 +54,8 @@ export function PaperLibrary() {
   const [metadata, setMetadata] = useState<PaperMetadataCandidate>();
   const [candidates, setCandidates] = useState<PaperMetadataCandidate[]>([]);
   const [searchingMetadata, setSearchingMetadata] = useState(false);
+  const [refreshingIds, setRefreshingIds] = useState<string[]>([]);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [metadataNotice, setMetadataNotice] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLFormElement>(null);
@@ -64,8 +76,8 @@ export function PaperLibrary() {
         (paper) =>
           (status === "all" || paper.readingStatus === status) &&
           (year === "all" || String(paper.year) === year) &&
-          (topic === "all" || paper.tags.includes(topic)) &&
-          `${paper.title} ${paper.authors.join(" ")} ${paper.tags.join(" ")} ${paper.mySummary}`
+          (topic === "all" || paperKeywords(paper).includes(topic)) &&
+          paperSearchText(paper)
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
@@ -101,6 +113,12 @@ export function PaperLibrary() {
         // 查询失败时仍保留用户输入，允许稍后再次补全。
       }
     }
+    const localizedKeywords = resolvedMetadata?.keywords?.length
+      ? await bilingualizeKeywords(resolvedMetadata.keywords)
+      : editing?.autoKeywords;
+    const localizedSummary = resolvedMetadata?.abstract
+      ? await summarizePaperInChinese(resolvedMetadata.abstract)
+      : editing?.autoSummary;
     const id = editing?.id ?? crypto.randomUUID();
     const enteredTitle = String(form.get("title")).trim();
     const enteredAuthors = String(form.get("authors"))
@@ -129,16 +147,31 @@ export function PaperLibrary() {
         .filter(Boolean).length ? String(form.get("tags"))
           .split(/[,，]/)
           .map((value) => value.trim())
-          .filter(Boolean) : resolvedMetadata?.keywords) ?? [],
+          .filter(Boolean) : editing?.tags) ?? [],
+      autoKeywords: localizedKeywords,
       readingStatus: String(form.get("status")) as ReadingStatus,
       abstract: resolvedMetadata?.abstract || editing?.abstract,
-      mySummary: String(form.get("summary")).trim() || resolvedMetadata?.summary || editing?.mySummary || "",
+      mySummary: String(form.get("summary")).trim() || editing?.mySummary || "",
+      autoSummary: localizedSummary || editing?.autoSummary,
       myNotes: String(form.get("notes")).trim(),
       researchQuestion: String(form.get("researchQuestion")).trim(),
       methodSummary: String(form.get("methodSummary")).trim(),
+      dataSummary: String(form.get("dataSummary")).trim(),
+      mainContributions: String(form.get("mainContributions")).trim(),
+      mainResults: String(form.get("mainResults")).trim(),
+      limitations: String(form.get("limitations")).trim(),
+      futureWork: String(form.get("futureWork")).trim(),
       updatedAt: new Date().toISOString().slice(0, 10),
       isDemo: false,
     };
+    if (resolvedMetadata?.abstract) {
+      const filledAnalysis = fillMissingPaperAnalysis(paper, analyzePaperText(resolvedMetadata.abstract));
+      Object.assign(paper, filledAnalysis);
+      if (Object.keys(filledAnalysis).length) {
+        paper.analysisSource = "abstract";
+        paper.analysisUpdatedAt = new Date().toISOString();
+      }
+    }
     if (pdfFile) {
       try {
         await savePaperFile(id, pdfFile);
@@ -223,29 +256,78 @@ export function PaperLibrary() {
     }
   };
 
-  const findAvailablePdf = async (paper: Paper) => {
-    if (!paper.doi) return;
-    setNotice("正在查找开放获取 PDF…");
+  const refreshPaperData = async (paper: Paper) => {
+    const lookup = paper.doi || paper.title;
+    const results = await searchPaperMetadata(lookup);
+    const match = chooseMetadataMatch(lookup, results);
+    const found = match.selected ?? (paper.doi ? results[0] : undefined);
+    if (!found) throw new Error("没有找到标题足够接近的公开论文记录");
+    const now = new Date().toISOString();
+    const abstract = found.abstract || paper.abstract || "";
+    const analysis = analyzePaperText(abstract);
+    const filledAnalysis = fillMissingPaperAnalysis(paper, analysis);
+    const localizedKeywords = found.keywords?.length
+      ? await bilingualizeKeywords(found.keywords)
+      : paper.autoKeywords;
+    const localizedSummary = abstract
+      ? await summarizePaperInChinese(abstract)
+      : paper.autoSummary;
+    return {
+      ...paper,
+      ...filledAnalysis,
+      title: found.title || paper.title,
+      authors: found.authors.length ? found.authors : paper.authors,
+      year: found.year || paper.year,
+      venue: found.venue || paper.venue,
+      doi: found.doi || paper.doi,
+      url: found.url || paper.url,
+      pdfUrl: found.pdfUrl || paper.pdfUrl,
+      abstract: abstract || undefined,
+      autoKeywords: localizedKeywords,
+      autoSummary: localizedSummary || paper.autoSummary,
+      metadataRefreshedAt: now,
+      analysisSource: Object.keys(filledAnalysis).length ? "abstract" : paper.analysisSource,
+      analysisUpdatedAt: Object.keys(filledAnalysis).length ? now : paper.analysisUpdatedAt,
+      updatedAt: now.slice(0, 10),
+      isDemo: false,
+    } satisfies Paper;
+  };
+
+  const refreshOnePaper = async (paper: Paper) => {
+    setRefreshingIds((current) => [...current, paper.id]);
+    setNotice(`正在刷新《${paper.title}》的资料…`);
     try {
-      const found = (await searchPaperMetadata(paper.doi))[0];
-      if (!found) {
-        setNotice("没有找到该 DOI 对应的论文信息。 ");
-        return;
-      }
-      const updated = {
-        ...paper,
-        title: found.title || paper.title,
-        authors: found.authors.length ? found.authors : paper.authors,
-        year: found.year || paper.year,
-        venue: found.venue || paper.venue,
-        url: found.url || paper.url,
-        pdfUrl: found.pdfUrl,
-      };
+      const updated = await refreshPaperData(paper);
       persist(items.map((item) => item.id === paper.id ? updated : item));
-      setNotice(found.pdfUrl ? "已找到可直接打开的开放 PDF。" : "书目信息已更新，但没有发现开放 PDF；你仍可打开论文页面，或手动上传已有 PDF。 ");
-    } catch {
-      setNotice("暂时无法查询开放 PDF，请稍后再试。 ");
+      setNotice(updated.pdfUrl
+        ? "资料已刷新，并已找到可直接打开的 PDF。"
+        : "资料已刷新；暂未发现开放 PDF，本地文件和个人笔记均已保留。 ");
+    } catch (error) {
+      setNotice(error instanceof Error ? `刷新失败：${error.message}。` : "刷新失败，请稍后再试。 ");
+    } finally {
+      setRefreshingIds((current) => current.filter((id) => id !== paper.id));
     }
+  };
+
+  const refreshAllPapers = async () => {
+    if (!items.length || refreshingAll) return;
+    setRefreshingAll(true);
+    let next = [...items];
+    let refreshed = 0;
+    let failed = 0;
+    for (const [index, paper] of items.entries()) {
+      setNotice(`正在刷新第 ${index + 1}/${items.length} 篇：《${paper.title}》…`);
+      try {
+        const updated = await refreshPaperData(paper);
+        next = next.map((item) => item.id === paper.id ? updated : item);
+        persist(next);
+        refreshed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setRefreshingAll(false);
+    setNotice(`全部刷新完成：成功 ${refreshed} 篇，未匹配 ${failed} 篇。PDF、笔记和研究方向关联均未改动。`);
   };
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -263,7 +345,7 @@ export function PaperLibrary() {
 
   const years = [...new Set(items.map((paper) => paper.year).filter(Boolean))]
     .sort((a, b) => Number(b) - Number(a));
-  const topics = [...new Set(items.flatMap((paper) => paper.tags))].sort();
+  const topics = [...new Set(items.flatMap(paperKeywords))].sort();
 
   return (
     <AppShell section="本地文献库">
@@ -276,6 +358,9 @@ export function PaperLibrary() {
             </p>
           </div>
           <div className="top-actions">
+            <button className="btn" disabled={refreshingAll} onClick={refreshAllPapers}>
+              {refreshingAll ? "正在刷新…" : "刷新全部资料"}
+            </button>
             <button className="btn" onClick={() => exportLibrary(items)}>
               导出备份
             </button>
@@ -351,10 +436,10 @@ export function PaperLibrary() {
               </Link>
               <div className="meta">{paper.authors.join(", ") || "作者未填"}</div>
               <p className="paper-summary">
-                {paper.mySummary || "尚未填写一句话总结。"}
+                {paper.mySummary || paper.autoSummary || "尚未生成一句话总结。"}
               </p>
               <div className="tag-row">
-                {paper.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}
+                {paperKeywords(paper).map((tag) => <span className="tag" key={tag}>{tag}</span>)}
                 {paper.isDemo && <span className="tag demo">演示数据</span>}
               </div>
               <div className="paper-foot">
@@ -365,7 +450,9 @@ export function PaperLibrary() {
                   {paper.attachmentName && <><button className="btn" onClick={() => openLocalFile(paper)}>打开本地 PDF</button>{" "}</>}
                   {paper.pdfUrl && <><a className="btn primary" href={paper.pdfUrl} target="_blank" rel="noreferrer">打开 PDF ↗</a>{" "}</>}
                   {paperSourceUrl(paper) && <><a className="btn" href={paperSourceUrl(paper)} target="_blank" rel="noreferrer">打开论文页面 ↗</a>{" "}</>}
-                  {paper.doi && !paper.attachmentName && !paper.pdfUrl && <><button className="btn" onClick={() => findAvailablePdf(paper)}>查找可用 PDF</button>{" "}</>}
+                  <button className="btn" disabled={refreshingAll || refreshingIds.includes(paper.id)} onClick={() => refreshOnePaper(paper)}>
+                    {refreshingIds.includes(paper.id) ? "刷新中…" : "刷新资料"}
+                  </button>{" "}
                   <button className="btn" onClick={() => openEditor(paper)}>编辑</button>{" "}
                   <button className="btn danger" onClick={() => remove(paper.id)}>删除</button>
                 </div>
@@ -421,6 +508,11 @@ export function PaperLibrary() {
                     <label className="label wide">发表来源<input name="venue" className="field" defaultValue={editing?.venue} placeholder="期刊、会议或预印本平台" /></label>
                     <label className="label wide">研究问题<textarea name="researchQuestion" className="field" defaultValue={editing?.researchQuestion} /></label>
                     <label className="label wide">方法概述<textarea name="methodSummary" className="field" defaultValue={editing?.methodSummary} /></label>
+                    <label className="label wide">数据集<textarea name="dataSummary" className="field" defaultValue={editing?.dataSummary} /></label>
+                    <label className="label wide">主要贡献<textarea name="mainContributions" className="field" defaultValue={editing?.mainContributions} /></label>
+                    <label className="label wide">主要结果<textarea name="mainResults" className="field" defaultValue={editing?.mainResults} /></label>
+                    <label className="label wide">局限性<textarea name="limitations" className="field" defaultValue={editing?.limitations} /></label>
+                    <label className="label wide">未来工作<textarea name="futureWork" className="field" defaultValue={editing?.futureWork} /></label>
                     <label className="label wide">我的笔记<textarea name="notes" className="field" defaultValue={editing?.myNotes} /></label>
                   </div>
                 </details>
